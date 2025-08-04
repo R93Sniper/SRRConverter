@@ -18,7 +18,7 @@ For SRM to FBX, you need Autodesk's Python FBX SDK. This was built with version 
 
 # Feature Support
 Currently Supports the following:</br> </br>
-**Soul Reaver 1 SRM to FBX**
+**SRM to FBX**
 - Vertices
 - Triangles
 - UVs
