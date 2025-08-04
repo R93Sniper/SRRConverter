@@ -173,5 +173,3 @@ class SrmFile:
             buffer = DisplayBuffer.from_stream(stream)
 
         return cls(header, texture_palette, bones, buffer)
-    
-test = SrmFile.from_file(Path("RAZIEL_1.SRM"))
