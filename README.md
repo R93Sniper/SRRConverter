@@ -11,7 +11,12 @@ Purchse the games on your retailer of choice: </br>
 **Playstation**: https://www.playstation.com/en-us/games/legacy-of-kain-soul-reaver-1-2-remastered/ </br>
 **Luna**: https://luna.amazon.com/game/legacy-of-kain-soul-reaver-12-remastered/B0DVV9LMCW </br>
 
+# Pre-Requisites
+This was written with Python 3.10.18. Earlier versions are not likely to be compatible, but you can try </br> 
+For SRM to FBX, you need Autodesk's Python FBX SDK. This was built with version 2020.3.7, but might work with other versions. Get the SDK here: https://aps.autodesk.com/developer/overview/fbx-sdk
 
+
+# Feature Support
 Currently Supports the following:</br> </br>
 **Soul Reaver 1 SRM to FBX**
 - Vertices
