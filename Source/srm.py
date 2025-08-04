@@ -137,7 +137,7 @@ class Bones:
         for _ in range(0x80):
             bone_pos = unpack("<3f", stream.read(0xc))
             # inverted y, z for some reason?
-            bone_list.append((bone_pos[0], -bone_pos[1], -bone_pos[2]))
+            bone_list.append((bone_pos[0], bone_pos[1], bone_pos[2]))
         active_bones = unpack("128?", stream.read(0x80))
         return cls(bone_list, active_bones)
 
@@ -173,3 +173,4 @@ class SrmFile:
             buffer = DisplayBuffer.from_stream(stream)
 
         return cls(header, texture_palette, bones, buffer)
+
