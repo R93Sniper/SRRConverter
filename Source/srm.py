@@ -1,0 +1,154 @@
+from dataclasses import dataclass
+from struct import unpack
+from enum import IntFlag
+from pathlib import Path
+
+class HeaderMismatch(Exception):
+    """Exception raised for SRM header mismatch."""
+
+    def __init__(self, got):
+        self.message = "Passed file does not contain a valid header"
+        self.got = got
+        super().__init__(self.message)
+
+    def __str__(self):
+        return f"{self.message} (Expected: '0x14D5253' - Got: {self.got})"
+
+SRM_SIGNATURE = 0x14D5253 #SRM\x01
+
+@dataclass
+class Header:
+    """ Header for the SRM file """
+    signature: int = SRM_SIGNATURE
+    # a lot of unknowns here, but I don't care ATM
+
+    @classmethod
+    def from_stream(cls, stream) -> "Header":
+        """ Parse the header from stream. """
+        (signature,) = unpack("<I48x", stream.read(52))
+        if signature != SRM_SIGNATURE:
+            raise HeaderMismatch(signature)
+        return cls(signature)
+    
+class TextureType(IntFlag):
+    """ Bitflag representing which maps are defined for a texture (EG diffuse, specular, etc) """
+    Diffuse  = 0b0001
+    Normal   = 0b0010
+    Specular = 0b0100
+    Emissive = 0b1000
+
+    @classmethod
+    def try_from(cls, stream) -> "TextureType":
+        """ Try to read the TextureType from stream. If unknown flag encountered it will print out. soft warning """
+        value = int.from_bytes(stream.read(1), byteorder='little')
+        if value > 0xF:
+            print(f"Unknown texture flag: {0b11110000 & value}")
+        return TextureType(value)
+
+@dataclass
+class TextureEntry:
+    """ Represents an individual texture in the model. """
+    name: str = ""
+    type: TextureType = 0
+
+    @classmethod
+    def from_stream(cls, stream) -> "TextureEntry":
+        """ Parse a texture entry from the texture palette """
+        name = stream.read(31).decode("ascii").rstrip("\x00")
+        type = TextureType.try_from(stream)
+
+        return cls(name, type)
+    
+    def get_texture_suffixes(self) -> list[str]:
+        """ Given the current texture type, create the suffixes that represent the expected filenames. """
+        suffixes = []
+        if TextureType.Diffuse in self.type:
+            suffixes.append(f"{self.name}_D")
+        if TextureType.Normal in self.type:
+            suffixes.append(f"{self.name}_N")
+        if TextureType.Specular in self.type:
+            suffixes.append(f"{self.name}_S")
+        if TextureType.Emissive in self.type:
+            suffixes.append(f"{self.name}_E")
+        return suffixes
+
+@dataclass
+class TexturePalette:
+    """ Holds all the textures used by the model """
+    textures: list[TextureEntry]
+
+    @classmethod
+    def from_stream(cls, stream) -> "TexturePalette":
+        """ Parse the texture palette from stream """
+        count = int.from_bytes(stream.read(4), "little")
+        return cls([TextureEntry.from_stream(stream) for _ in range(count)])
+    
+@dataclass
+class Vertex:
+    """ Vertex data """
+    x             : float = 0
+    y             : float = 0
+    z             : float = 0
+    extra_1       : int   = 0   # unknown
+    extra_2       : int   = 0   # unknown
+    extra_3       : int   = 0   # unknown
+    extra_4       : int   = 0   # Usually [0, 2]
+    normal_x      : int   = 0   # Should prolly be normalized x/255
+    normal_y      : int   = 0   # Should prolly be normalized x/255
+    normal_z      : int   = 0   # Should prolly be normalized x/255
+    texture_index : int   = 0   # Weird it's on the vertex and not the face
+    light_0       : int   = 0
+    light_1       : int   = 0
+    light_2       : int   = 0
+    u             : int   = 0   # Should prolly be normalized x/255
+    r             : int   = 0
+    g             : int   = 0
+    b             : int   = 0
+    v             : int   = 0   # Should prolly be normalized x/255
+
+    @classmethod
+    def from_stream(cls, stream) -> "Vertex":
+        """ Parse vertex data from stream """
+        return cls(*unpack("<3f16b4x", stream.read(0x20)))
+
+@dataclass
+class DisplayBuffer:
+    """ Last part of the file. Holds all the vertices and indices """
+    vertices: list[Vertex]
+    indices: list[(int, int, int)]
+
+    @classmethod
+    def from_stream(cls, stream) -> "Vertex":
+        """ Parse the vertices and indices from stream """
+        (vert_count, index_count) = unpack("<2I", stream.read(8))
+        vertices = [Vertex.from_stream(stream) for _ in range(vert_count)]
+        indices  = [unpack("<3H", stream.read(6)) for _ in range(0, index_count, 3)]
+
+        return cls(vertices, indices)
+    
+@dataclass
+class SrmFile:
+    """ Highest level structure, pulls all the parts together """
+    header: Header
+    texture_palette: TexturePalette
+    unknown_00: bytes   # Maybe bones?
+    unknown_01: bytes   # bools? always 0/1
+    display_buffer: DisplayBuffer
+
+    @classmethod
+    def from_file(cls, path: Path) -> "SrmFile":
+        """ Attempt to parse a srm file """
+        if not path.exists():
+            raise FileNotFoundError()
+        if not path.is_file():
+            raise IsADirectoryError()
+        
+        with open(path, "rb") as stream:
+            header = Header.from_stream(stream)
+            texture_palette = TexturePalette.from_stream(stream)
+            stream.read(4) # delim? padding?
+            unknown_00 = stream.read(0x600) # Bones maybe?
+            unknown_01 = stream.read(0x80)  # array of booleans?
+            buffer = DisplayBuffer.from_stream(stream)
+
+        return cls(header, texture_palette, unknown_00, unknown_01, buffer)
