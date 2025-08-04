@@ -18,7 +18,7 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
         return None
 
     root_node = scene.GetRootNode()
-    mesh_node = fbx.FbxNode.Create(manager, "SRM_Mesh")
+    mesh_node = fbx.FbxNode.Create(manager, srm_path.stem)
     mesh = fbx.FbxMesh.Create(manager, "Mesh")
 
     if not mesh or not mesh_node:
