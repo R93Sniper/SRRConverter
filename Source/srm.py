@@ -40,7 +40,7 @@ class TextureType(IntFlag):
     @classmethod
     def try_from(cls, stream) -> "TextureType":
         """ Try to read the TextureType from stream. If unknown flag encountered it will print out. soft warning """
-        value = int.from_bytes(stream.read(1))
+        value = int.from_bytes(stream.read(1), "little")
         if value > 0xF:
             print(f"Unknown texture flag: {0b11110000 & value}")
         return TextureType(value)
@@ -173,4 +173,5 @@ class SrmFile:
             buffer = DisplayBuffer.from_stream(stream)
 
         return cls(header, texture_palette, bones, buffer)
+
 
