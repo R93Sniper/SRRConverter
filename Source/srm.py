@@ -40,7 +40,7 @@ class TextureType(IntFlag):
     @classmethod
     def try_from(cls, stream) -> "TextureType":
         """ Try to read the TextureType from stream. If unknown flag encountered it will print out. soft warning """
-        value = int.from_bytes(stream.read(1), byteorder='little')
+        value = int.from_bytes(stream.read(1))
         if value > 0xF:
             print(f"Unknown texture flag: {0b11110000 & value}")
         return TextureType(value)
@@ -87,8 +87,8 @@ class TexturePalette:
 class Vertex:
     """ Vertex data """
     x             : float = 0
-    y             : float = 0
     z             : float = 0
+    y             : float = 0
     extra_1       : int   = 0   # unknown
     extra_2       : int   = 0   # unknown
     extra_3       : int   = 0   # unknown
@@ -127,12 +127,34 @@ class DisplayBuffer:
         return cls(vertices, indices)
     
 @dataclass
+class Bones:
+    bone_list: list[(float, float, float)]
+    active_bones: list[bool]
+
+    @classmethod
+    def from_stream(cls, stream) -> "Bones":
+        bone_list = []
+        for _ in range(0x80):
+            bone_pos = unpack("<3f", stream.read(0xc))
+            # inverted y, z for some reason?
+            bone_list.append((bone_pos[0], -bone_pos[1], -bone_pos[2]))
+        active_bones = unpack("128?", stream.read(0x80))
+        return cls(bone_list, active_bones)
+
+    def get_bone(self, index: int) -> tuple[float, float, float]:
+        if index > 0x80:
+            return None
+        if self.active_bones[index]:
+            return self.bone_list[index]
+        else:
+            return None
+    
+@dataclass
 class SrmFile:
     """ Highest level structure, pulls all the parts together """
     header: Header
     texture_palette: TexturePalette
-    unknown_00: bytes   # Maybe bones?
-    unknown_01: bytes   # bools? always 0/1
+    bones: Bones
     display_buffer: DisplayBuffer
 
     @classmethod
@@ -147,8 +169,9 @@ class SrmFile:
             header = Header.from_stream(stream)
             texture_palette = TexturePalette.from_stream(stream)
             stream.read(4) # delim? padding?
-            unknown_00 = stream.read(0x600) # Bones maybe?
-            unknown_01 = stream.read(0x80)  # array of booleans?
+            bones = Bones.from_stream(stream)
             buffer = DisplayBuffer.from_stream(stream)
 
-        return cls(header, texture_palette, unknown_00, unknown_01, buffer)
+        return cls(header, texture_palette, bones, buffer)
+    
+test = SrmFile.from_file(Path("RAZIEL_1.SRM"))
