@@ -27,12 +27,13 @@ def main():
     for srm_path in srm_files:
         print(f"\nProcessing '{srm_path.name}'...")
 
-        scene = convert_srm_to_fbx(srm_path, manager)
+        output_path = OUTPUT_DIR / f"{srm_path.stem}" / f"{srm_path.stem}.fbx"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        scene = convert_srm_to_fbx(srm_path, output_path, manager)
         if not scene:
             print(f"Conversion failed for {srm_path.name}. Skipping.")
             continue
-
-        output_path = OUTPUT_DIR / f"{srm_path.stem}.fbx"
 
         exporter = fbx.FbxExporter.Create(manager, "")
         if not exporter.Initialize(str(output_path)):
