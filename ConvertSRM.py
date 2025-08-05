@@ -99,7 +99,7 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
 
     material_name_to_index = {}
     for mat_name in used_material_names:
-        mat = fbx.FbxSurfaceLambert.Create(manager, mat_name)
+        mat = fbx.FbxSurfacePhong.Create(manager, mat_name)  # Using Phong per your previous fix
         mesh_node.AddMaterial(mat)
         material_name_to_index[mat_name] = len(material_name_to_index)
 
@@ -125,9 +125,6 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
             uv_index_array.Add(uv_index)
         mesh.EndPolygon()
 
-        if poly_idx % 1000 == 0:
-            print(f"Processed polygon {poly_idx}/{len(srm.display_buffer.indices)}")
-
     print("Assigning materials to polygons...")
 
     material_element = mesh.CreateElementMaterial()
@@ -139,6 +136,56 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
         material_element.GetIndexArray().Add(mat_index)
 
     print("Material assignment completed.")
+
+    # Texture linking
+    print("Linking textures to materials...")
+
+    texture_types = {
+        '_D': fbx.FbxSurfaceMaterial.sDiffuse,
+        '_E': fbx.FbxSurfaceMaterial.sEmissive,
+        '_S': fbx.FbxSurfaceMaterial.sSpecular,
+        '_N': fbx.FbxSurfaceMaterial.sNormalMap,
+    }
+
+    textures_dir = srm_path.parent.parent / "Textures"
+    print(f"Looking for textures in: {textures_dir}")
+
+    for mat_name in used_material_names:
+        mat = None
+        # Find the material instance by name from mesh_node materials
+        for i in range(mesh_node.GetMaterialCount()):
+            m = mesh_node.GetMaterial(i)
+            if m.GetName() == mat_name:
+                mat = m
+                break
+        if mat is None:
+            print(f"Material '{mat_name}' not found on mesh node.")
+            continue
+
+        found_any = False
+        for suffix, fbx_prop in texture_types.items():
+            tex_filename = f"{mat_name}{suffix}.dds"
+            tex_path = textures_dir / tex_filename
+            if tex_path.exists():
+                found_any = True
+                print(f"Linking texture '{tex_filename}' to material '{mat_name}' property '{fbx_prop}'")
+                fbx_tex = fbx.FbxFileTexture.Create(manager, tex_path.stem)
+                fbx_tex.SetFileName(str(tex_path))
+                fbx_tex.SetSwapUV(False)
+                fbx_tex.SetTranslation(0.0, 0.0)
+                fbx_tex.SetScale(1.0, 1.0)
+                fbx_tex.SetRotation(0.0, 0.0)
+                prop = mat.FindProperty(fbx_prop)
+                if prop.IsValid():
+                    prop.ConnectSrcObject(fbx_tex)
+                    print(f"Successfully linked texture '{tex_filename}'")
+                else:
+                    print(f"Material property '{fbx_prop}' not valid for material '{mat_name}'")
+            else:
+                print(f"Texture file not found: {tex_path}")
+
+        if not found_any:
+            print(f"No textures found for material '{mat_name}'")
 
     # Skeleton
     print("Creating skeleton...")
@@ -160,7 +207,13 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
         bone_skel = fbx.FbxSkeleton.Create(manager, bone_name)
         bone_skel.SetSkeletonType(fbx.FbxSkeleton.EType.eLimbNode)
         bone_node.SetNodeAttribute(bone_skel)
-        bone_node.LclTranslation.Set(fbx.FbxDouble3(*bone_pos))
+        
+        # Axis remapping (assumes SRM Z-Up to FBX Y-Up)
+        x, y, z = bone_pos
+        fbx_pos = fbx.FbxDouble3(x, -z, -y)
+        bone_node.LclTranslation.Set(fbx_pos)
+
+
         skeleton_root.AddChild(bone_node)
 
     print("Skeleton creation completed.")
