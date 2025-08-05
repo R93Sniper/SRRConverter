@@ -148,27 +148,21 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
     }
 
     textures_dir = srm_path.parent.parent / "Textures"
-    print(f"Looking for textures in: {textures_dir}")
 
     for mat_name in used_material_names:
         mat = None
-        # Find the material instance by name from mesh_node materials
         for i in range(mesh_node.GetMaterialCount()):
             m = mesh_node.GetMaterial(i)
             if m.GetName() == mat_name:
                 mat = m
                 break
         if mat is None:
-            print(f"Material '{mat_name}' not found on mesh node.")
             continue
 
-        found_any = False
         for suffix, fbx_prop in texture_types.items():
             tex_filename = f"{mat_name}{suffix}.dds"
             tex_path = textures_dir / tex_filename
             if tex_path.exists():
-                found_any = True
-                print(f"Linking texture '{tex_filename}' to material '{mat_name}' property '{fbx_prop}'")
                 fbx_tex = fbx.FbxFileTexture.Create(manager, tex_path.stem)
                 fbx_tex.SetFileName(str(tex_path))
                 fbx_tex.SetSwapUV(False)
@@ -178,14 +172,6 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
                 prop = mat.FindProperty(fbx_prop)
                 if prop.IsValid():
                     prop.ConnectSrcObject(fbx_tex)
-                    print(f"Successfully linked texture '{tex_filename}'")
-                else:
-                    print(f"Material property '{fbx_prop}' not valid for material '{mat_name}'")
-            else:
-                print(f"Texture file not found: {tex_path}")
-
-        if not found_any:
-            print(f"No textures found for material '{mat_name}'")
 
     # Skeleton
     print("Creating skeleton...")
@@ -207,16 +193,51 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
         bone_skel = fbx.FbxSkeleton.Create(manager, bone_name)
         bone_skel.SetSkeletonType(fbx.FbxSkeleton.EType.eLimbNode)
         bone_node.SetNodeAttribute(bone_skel)
-        
-        # Axis remapping (assumes SRM Z-Up to FBX Y-Up)
+
         x, y, z = bone_pos
         fbx_pos = fbx.FbxDouble3(x, -z, -y)
         bone_node.LclTranslation.Set(fbx_pos)
 
-
         skeleton_root.AddChild(bone_node)
 
     print("Skeleton creation completed.")
+
+    # Skinning weights & clusters
+    print("Creating skinning clusters and assigning weights...")
+    skin = fbx.FbxSkin.Create(manager, "Skin")
+    mesh.AddDeformer(skin)
+
+    for i, active in enumerate(srm.bones.active_bones):
+        if not active:
+            continue
+
+        bone_name = f"Bone_{i}"
+        bone_node = skeleton_root.FindChild(bone_name)
+        if bone_node is None:
+            print(f"Warning: Bone node '{bone_name}' not found for skin cluster.")
+            continue
+
+        cluster = fbx.FbxCluster.Create(manager, f"Cluster_{i}")
+        cluster.SetLink(bone_node)
+
+        for vert_index, vert in enumerate(srm.display_buffer.vertices):
+            bone_ids = [vert.light_0, vert.light_1, vert.light_2]
+            weights = [vert.r / 255.0, vert.g / 255.0, vert.b / 255.0]
+
+            for bone_idx, weight in zip(bone_ids, weights):
+                if bone_idx == i and weight > 0:
+                    cluster.AddControlPointIndex(vert_index, weight)
+
+        global_transform = mesh_node.EvaluateGlobalTransform()
+        cluster.SetTransformMatrix(global_transform)
+
+        global_link_transform = bone_node.EvaluateGlobalTransform()
+        cluster.SetTransformLinkMatrix(global_link_transform)
+
+        skin.AddCluster(cluster)
+
+    print("Skinning clusters created and weights assigned.")
+
     print("Conversion finished successfully.")
 
     return scene
