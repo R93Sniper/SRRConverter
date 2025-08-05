@@ -2,7 +2,7 @@ from pathlib import Path
 from Source.srm import SrmFile
 import fbx
 
-def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -> fbx.FbxScene | None:
+def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene | None:
     print(f"Reading SRM file: {srm_path.name}")
 
     try:
@@ -40,7 +40,6 @@ def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -
 
     # Normals
     print("Adding normals...")
-
     layer = mesh.GetLayer(0)
     if not layer:
         mesh.CreateLayer()
@@ -66,7 +65,6 @@ def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -
 
     # UVs
     print("Adding UV data with indexing reuse...")
-
     uv_element = layer.GetUVs()
     if not uv_element:
         uv_element = mesh.CreateElementUV("UVSet")
@@ -79,59 +77,40 @@ def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -
 
     uv_map = {}
 
-    # Materials
-    print("Creating materials from SRM texture palette...")
+    # --- MATERIAL CONSOLIDATION ---
+    print("Collecting polygon material names...")
 
-    materials = []
-    for texture_entry in srm.texture_palette.textures:
-        print(f"Creating Material {texture_entry.name}")
-        mat = fbx.FbxSurfacePhong.Create(manager, texture_entry.name)
-        mat.SetName(texture_entry.name)
-        
-        suffixes = texture_entry.get_texture_suffixes()
-        for suffix in suffixes:
-            fbx_texture = fbx.FbxFileTexture.Create(manager, suffix)
-            fbx_texture.SetFileName(f"{outpath}/{suffix}.DDS")
-            print(f"\tCreating texture {suffix}")
-            if "_D" in suffix:
-                mat.Diffuse.ConnectSrcObject(fbx_texture)
-            if "_S" in suffix:
-                mat.Specular.ConnectSrcObject(fbx_texture)
-            if "_N" in suffix:
-                mat.NormalMap.ConnectSrcObject(fbx_texture)
-            if "_E" in suffix:
-                mat.Emissive.ConnectSrcObject(fbx_texture)
-            
-        materials.append(mat)
-        mesh_node.AddMaterial(mat)
-
-    # Add an invalid material for out-of-range material IDs
-    invalid_material = fbx.FbxSurfaceLambert.Create(manager, "InvalidMaterial")
-    invalid_material.SetName("InvalidMaterial")
-    materials.append(invalid_material)
-    mesh_node.AddMaterial(invalid_material)
-    invalid_material_index = len(materials) - 1
-
-    print(f"Adding {len(srm.display_buffer.indices)} triangles with standard winding, UVs, and material IDs...")
-
-    polygon_material_indices = []
-
+    polygon_material_names = []
     for tri in srm.display_buffer.indices:
-        mesh.BeginPolygon()
-
         first_vertex_idx = tri[0]
-        material_id = srm.display_buffer.vertices[first_vertex_idx].texture_index
+        raw_mat_id = srm.display_buffer.vertices[first_vertex_idx].texture_index - 1
+        if raw_mat_id < 0 or raw_mat_id >= len(srm.texture_palette.textures):
+            print(f"Warning: Invalid material ID {raw_mat_id+1} on polygon, defaulting to 1")
+            raw_mat_id = 0
+        mat_name = srm.texture_palette.textures[raw_mat_id].name.strip()
+        polygon_material_names.append(mat_name)
 
-        if material_id < 0 or material_id >= len(materials):
-            print(f"Warning: Invalid material ID {material_id} on triangle, defaulting to InvalidMaterial")
-            material_id = invalid_material_index
+    used_material_names = []
+    for name in polygon_material_names:
+        if name not in used_material_names:
+            used_material_names.append(name)
 
-        for idx in tri:  # standard winding order: 0,1,2
+    print(f"Added {len(used_material_names)} consolidated materials.")
+
+    material_name_to_index = {}
+    for mat_name in used_material_names:
+        mat = fbx.FbxSurfaceLambert.Create(manager, mat_name)
+        mesh_node.AddMaterial(mat)
+        material_name_to_index[mat_name] = len(material_name_to_index)
+
+    print(f"Adding {len(srm.display_buffer.indices)} triangles with standard winding and UVs...")
+
+    for poly_idx, tri in enumerate(srm.display_buffer.indices):
+        mesh.BeginPolygon()
+        for idx in tri:
             vert = srm.display_buffer.vertices[idx]
-
             u = (vert.u / 255.0) % 1.0
             v = (vert.v / 255.0) % 1.0
-
             key = (idx, (u, v))
 
             if key in uv_map:
@@ -144,43 +123,32 @@ def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -
 
             mesh.AddPolygon(idx)
             uv_index_array.Add(uv_index)
-
         mesh.EndPolygon()
-        polygon_material_indices.append(material_id)
 
-    # Assign material IDs per polygon
+        if poly_idx % 1000 == 0:
+            print(f"Processed polygon {poly_idx}/{len(srm.display_buffer.indices)}")
+
+    print("Assigning materials to polygons...")
+
     material_element = mesh.CreateElementMaterial()
     material_element.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByPolygon)
     material_element.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eIndexToDirect)
 
-    for mat in materials:
-        material_element.GetDirectArray().Add(mat)
-
-    for mat_id in polygon_material_indices:
-        material_element.GetIndexArray().Add(mat_id)
+    for mat_name in polygon_material_names:
+        mat_index = material_name_to_index.get(mat_name, 0)
+        material_element.GetIndexArray().Add(mat_index)
 
     print("Material assignment completed.")
 
-    # Create skeleton and bones from SRM
+    # Skeleton
     print("Creating skeleton...")
-
-    skeleton_type_enum = None
-    if hasattr(fbx.FbxSkeleton.EType, 'eLimbNode'):
-        skeleton_type_enum = fbx.FbxSkeleton.EType.eLimbNode
-    elif hasattr(fbx.FbxSkeleton.EType, 'eLimb'):
-        skeleton_type_enum = fbx.FbxSkeleton.EType.eLimb
-    else:
-        print("[WARN] FBX skeleton limb enum not found, defaulting to eRoot")
-        skeleton_type_enum = fbx.FbxSkeleton.EType.eRoot
-
-    # Create root skeleton node
+    skeleton_type_enum = getattr(fbx.FbxSkeleton.EType, 'eLimbNode', fbx.FbxSkeleton.EType.eRoot)
     skeleton_root = fbx.FbxNode.Create(manager, "RootSkeleton")
     skeleton_attr = fbx.FbxSkeleton.Create(manager, "SkeletonRoot")
     skeleton_attr.SetSkeletonType(skeleton_type_enum)
     skeleton_root.SetNodeAttribute(skeleton_attr)
     root_node.AddChild(skeleton_root)
 
-    # Create a bone node for each active bone
     for i, active in enumerate(srm.bones.active_bones):
         if not active:
             continue
@@ -192,10 +160,7 @@ def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -
         bone_skel = fbx.FbxSkeleton.Create(manager, bone_name)
         bone_skel.SetSkeletonType(fbx.FbxSkeleton.EType.eLimbNode)
         bone_node.SetNodeAttribute(bone_skel)
-
-        # Set bone position relative to root
         bone_node.LclTranslation.Set(fbx.FbxDouble3(*bone_pos))
-
         skeleton_root.AddChild(bone_node)
 
     print("Skeleton creation completed.")
