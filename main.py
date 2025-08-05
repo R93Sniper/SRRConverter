@@ -10,7 +10,8 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    srm_files = list(INPUT_DIR.glob("*.srm"))
+    # linux case sensitive
+    srm_files = list(INPUT_DIR.glob("*.srm")) + list(INPUT_DIR.glob("*.SRM"))
     if not srm_files:
         print("No SRM files found in 'Input/SRM/'. Please add SRM files and try again.")
         return
