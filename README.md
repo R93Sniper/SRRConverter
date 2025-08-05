@@ -24,3 +24,4 @@ Currently Supports the following:</br> </br>
 - UVs
 - Material IDs
 - Mesh Normals
+- Bone Transforms
