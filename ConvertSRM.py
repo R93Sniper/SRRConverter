@@ -96,7 +96,7 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
     mesh_node.AddMaterial(invalid_material)
     invalid_material_index = len(materials) - 1
 
-    print(f"Adding {len(srm.display_buffer.indices)} triangles with reversed winding, UVs, and material IDs...")
+    print(f"Adding {len(srm.display_buffer.indices)} triangles with standard winding, UVs, and material IDs...")
 
     polygon_material_indices = []
 
@@ -110,7 +110,7 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
             print(f"Warning: Invalid material ID {material_id} on triangle, defaulting to InvalidMaterial")
             material_id = invalid_material_index
 
-        for idx in [tri[0], tri[2], tri[1]]:  # reversed winding
+        for idx in tri:  # standard winding order: 0,1,2
             vert = srm.display_buffer.vertices[idx]
 
             u = (vert.u / 255.0) % 1.0
@@ -144,5 +144,45 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
         material_element.GetIndexArray().Add(mat_id)
 
     print("Material assignment completed.")
+
+    # Create skeleton and bones from SRM
+    print("Creating skeleton...")
+
+    skeleton_type_enum = None
+    if hasattr(fbx.FbxSkeleton.EType, 'eLimbNode'):
+        skeleton_type_enum = fbx.FbxSkeleton.EType.eLimbNode
+    elif hasattr(fbx.FbxSkeleton.EType, 'eLimb'):
+        skeleton_type_enum = fbx.FbxSkeleton.EType.eLimb
+    else:
+        print("[WARN] FBX skeleton limb enum not found, defaulting to eRoot")
+        skeleton_type_enum = fbx.FbxSkeleton.EType.eRoot
+
+    # Create root skeleton node
+    skeleton_root = fbx.FbxNode.Create(manager, "RootSkeleton")
+    skeleton_attr = fbx.FbxSkeleton.Create(manager, "SkeletonRoot")
+    skeleton_attr.SetSkeletonType(skeleton_type_enum)
+    skeleton_root.SetNodeAttribute(skeleton_attr)
+    root_node.AddChild(skeleton_root)
+
+    # Create a bone node for each active bone
+    for i, active in enumerate(srm.bones.active_bones):
+        if not active:
+            continue
+
+        bone_pos = srm.bones.bone_list[i]
+        bone_name = f"Bone_{i}"
+
+        bone_node = fbx.FbxNode.Create(manager, bone_name)
+        bone_skel = fbx.FbxSkeleton.Create(manager, bone_name)
+        bone_skel.SetSkeletonType(fbx.FbxSkeleton.EType.eLimbNode)
+        bone_node.SetNodeAttribute(bone_skel)
+
+        # Set bone position relative to root
+        bone_node.LclTranslation.Set(fbx.FbxDouble3(*bone_pos))
+
+        skeleton_root.AddChild(bone_node)
+
+    print("Skeleton creation completed.")
     print("Conversion finished successfully.")
+
     return scene
