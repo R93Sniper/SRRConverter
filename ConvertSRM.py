@@ -2,7 +2,7 @@ from pathlib import Path
 from Source.srm import SrmFile
 import fbx
 
-def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene | None:
+def convert_srm_to_fbx(srm_path: Path, outpath: Path, manager: fbx.FbxManager) -> fbx.FbxScene | None:
     print(f"Reading SRM file: {srm_path.name}")
 
     try:
@@ -84,8 +84,24 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
 
     materials = []
     for texture_entry in srm.texture_palette.textures:
-        mat = fbx.FbxSurfaceLambert.Create(manager, texture_entry.name)
+        print(f"Creating Material {texture_entry.name}")
+        mat = fbx.FbxSurfacePhong.Create(manager, texture_entry.name)
         mat.SetName(texture_entry.name)
+        
+        suffixes = texture_entry.get_texture_suffixes()
+        for suffix in suffixes:
+            fbx_texture = fbx.FbxFileTexture.Create(manager, suffix)
+            fbx_texture.SetFileName(f"{outpath}/{suffix}.DDS")
+            print(f"\tCreating texture {suffix}")
+            if "_D" in suffix:
+                mat.Diffuse.ConnectSrcObject(fbx_texture)
+            if "_S" in suffix:
+                mat.Specular.ConnectSrcObject(fbx_texture)
+            if "_N" in suffix:
+                mat.NormalMap.ConnectSrcObject(fbx_texture)
+            if "_E" in suffix:
+                mat.Emissive.ConnectSrcObject(fbx_texture)
+            
         materials.append(mat)
         mesh_node.AddMaterial(mat)
 
