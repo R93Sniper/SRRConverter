@@ -2,6 +2,14 @@ from pathlib import Path
 from Source.srm import SrmFile
 import fbx
 
+def amatrix_to_fbxmatrix(amatrix):
+    fbx_matrix = fbx.FbxMatrix()
+    for row in range(4):
+        for col in range(4):
+            fbx_matrix.Set(row, col, amatrix.Get(row, col))
+    return fbx_matrix
+
+
 def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene | None:
     print(f"Reading SRM file: {srm_path.name}")
 
@@ -182,12 +190,16 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
     skeleton_root.SetNodeAttribute(skeleton_attr)
     root_node.AddChild(skeleton_root)
 
-    for i, active in enumerate(srm.bones.active_bones):
+    bone_node_map = {}
+    skipped_bones = 0
+
+    for i, (active, bone_pos) in enumerate(zip(srm.bones.active_bones, srm.bones.bone_list)):
         if not active:
+            skipped_bones += 1
             continue
 
         bone_pos = srm.bones.bone_list[i]
-        bone_name = f"Bone_{i}"
+        bone_name = f"Bone_{i:03}"
 
         bone_node = fbx.FbxNode.Create(manager, bone_name)
         bone_skel = fbx.FbxSkeleton.Create(manager, bone_name)
@@ -195,49 +207,55 @@ def convert_srm_to_fbx(srm_path: Path, manager: fbx.FbxManager) -> fbx.FbxScene 
         bone_node.SetNodeAttribute(bone_skel)
 
         x, y, z = bone_pos
-        fbx_pos = fbx.FbxDouble3(x, -z, -y)
+        fbx_pos = fbx.FbxDouble3(-x, -z, -y)
         bone_node.LclTranslation.Set(fbx_pos)
 
         skeleton_root.AddChild(bone_node)
+        bone_node_map[i-skipped_bones] = bone_node
 
+    print(f"We skipped {skipped_bones} bones")
     print("Skeleton creation completed.")
+    
 
     # Skinning weights & clusters
     print("Creating skinning clusters and assigning weights...")
     skin = fbx.FbxSkin.Create(manager, "Skin")
     mesh.AddDeformer(skin)
 
-    for i, active in enumerate(srm.bones.active_bones):
-        if not active:
-            continue
-
-        bone_name = f"Bone_{i}"
-        bone_node = skeleton_root.FindChild(bone_name)
-        if bone_node is None:
-            print(f"Warning: Bone node '{bone_name}' not found for skin cluster.")
-            continue
-
-        cluster = fbx.FbxCluster.Create(manager, f"Cluster_{i}")
+    bone_clusters = {}
+    for bone_idx, bone_node in bone_node_map.items():
+        cluster = fbx.FbxCluster.Create(manager, f"Cluster_{bone_idx}")
         cluster.SetLink(bone_node)
+        bone_clusters[bone_idx] = cluster
 
-        for vert_index, vert in enumerate(srm.display_buffer.vertices):
-            bone_ids = [vert.light_0, vert.light_1, vert.light_2]
-            weights = [vert.r / 255.0, vert.g / 255.0, vert.b / 255.0]
 
-            for bone_idx, weight in zip(bone_ids, weights):
-                if bone_idx == i and weight > 0:
-                    cluster.AddControlPointIndex(vert_index, weight)
+    for vert_index, vert in enumerate(srm.display_buffer.vertices):
+        bone_ids = [vert.light_0, vert.light_1, vert.light_2]
+        weights = [vert.r / 255.0, vert.g / 255.0, vert.b / 255.0]
 
-        global_transform = mesh_node.EvaluateGlobalTransform()
-        cluster.SetTransformMatrix(global_transform)
+        for bone_idx, weight in zip(bone_ids, weights):
+            if weight > 0 and bone_idx in bone_clusters:
+                bone_clusters[bone_idx].AddControlPointIndex(vert_index, weight)
 
-        global_link_transform = bone_node.EvaluateGlobalTransform()
-        cluster.SetTransformLinkMatrix(global_link_transform)
-
+    
+    mesh_transform = mesh_node.EvaluateGlobalTransform()
+    for bone_idx, cluster in bone_clusters.items():
+        bone_node = bone_node_map[bone_idx]
+        cluster.SetTransformMatrix(mesh_transform)
+        cluster.SetTransformLinkMatrix(bone_node.EvaluateGlobalTransform())
         skin.AddCluster(cluster)
 
-    print("Skinning clusters created and weights assigned.")
+    # Add bind pose
+    print("Adding bind pose...")
+    pose = fbx.FbxPose.Create(scene, "BindPose")
+    pose.SetIsBindPose(True)
 
+    pose.Add(mesh_node, amatrix_to_fbxmatrix(mesh_transform))
+    for bone_node in bone_node_map.values():
+        pose.Add(bone_node, amatrix_to_fbxmatrix(bone_node.EvaluateGlobalTransform()))
+    scene.AddPose(pose)
+
+    print("Skinning clusters created and weights assigned.")
     print("Conversion finished successfully.")
 
     return scene
