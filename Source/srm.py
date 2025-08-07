@@ -109,7 +109,11 @@ class Vertex:
     @classmethod
     def from_stream(cls, stream) -> "Vertex":
         """ Parse vertex data from stream """
-        return cls(*unpack("<3f16B4x", stream.read(0x20)))
+        vertex = cls(*unpack("<3f16B4x", stream.read(0x20)))
+        vertex.normal_x -= 127
+        vertex.normal_y -= 127
+        vertex.normal_z -= 127
+        return vertex
 
 @dataclass
 class DisplayBuffer:
@@ -173,6 +177,7 @@ class SrmFile:
             buffer = DisplayBuffer.from_stream(stream)
 
         return cls(header, texture_palette, bones, buffer)
+
 
 
 
