@@ -12,7 +12,7 @@ Purchse the games on your retailer of choice: </br>
 **Luna**: https://luna.amazon.com/game/legacy-of-kain-soul-reaver-12-remastered/B0DVV9LMCW </br>
 
 # Pre-Requisites
-This was written with Python 3.10.18. Earlier versions are not likely to be compatible, but you can try </br> 
+This was written with Python 3.10.18. Other python versions may work but have not been tested. </br> 
 For SRM to FBX, you need Autodesk's Python FBX SDK. This was built with version 2020.3.7, but might work with other versions. Get the SDK here: https://aps.autodesk.com/developer/overview/fbx-sdk
 
 
@@ -25,3 +25,4 @@ Currently Supports the following:</br> </br>
 - Material IDs
 - Mesh Normals
 - Bone Transforms
+- Skin Weights
