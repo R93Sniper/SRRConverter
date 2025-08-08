@@ -3,7 +3,7 @@
 A python-based tool to convert files from the Remaster of Soul Reaver 1 and 2 into file formats usable by common DCC apps (Such as 3DS Max and Blender). </br>
 This repository does NOT contain any files from the games themselves, only tooling to convert the files. 
 
-Purchse the games on your retailer of choice: </br>
+Purchase the games on your retailer of choice: </br>
 **Steam**: https://store.steampowered.com/app/2521380/Legacy_of_Kain_Soul_Reaver_12_Remastered/ </br>
 **GoG**: https://www.gog.com/en/game/legacy_of_kain_soul_reaver_12_remastered </br>
 **Switch**: https://www.nintendo.com/us/store/products/legacy-of-kain-soul-reaver-1-and-2-remastered-switch/ </br>
