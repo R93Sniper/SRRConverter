@@ -50,7 +50,7 @@ def ParseSRM(PathToFile: Path) -> SrmFile | None:
 # Create the Scene in our FBXManager to start building the mesh
 # We return the Scene and our Mesh if we can build it. Else we return null
 # ================================================================================================================
-def InitializeScene(PathToFile: Path) -> tuple[fbx.FbxScene, fbx.FbxNode, fbx.FbxMesh] | None:
+def InitializeScene(PathToFile: Path) -> tuple[fbx.FbxScene, fbx.FbxNode, fbx.FbxNode, fbx.FbxMesh] | None:
     global SceneManager, OutputString
 
     OurScene = fbx.FbxScene.Create(SceneManager, PathToFile.stem)
@@ -72,7 +72,7 @@ def InitializeScene(PathToFile: Path) -> tuple[fbx.FbxScene, fbx.FbxNode, fbx.Fb
         MeshNode.SetNodeAttribute(WorkingMesh)
         SceneRoot.AddChild(MeshNode)
         OutputString += "\nMesh Created succesfully"
-        return SceneRoot, MeshNode, WorkingMesh
+        return OurScene, SceneRoot, MeshNode, WorkingMesh
     else:
         OutputString += "\nFailed to create mesh or mesh node."
         return None
@@ -237,6 +237,7 @@ def ProcessTriangleInfo(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh, WorkingNo
 
     OutputString += "\nMaterials assigned successfully."
 
+"""
 # ================================================================================================================
 # Link Textures to Materials Function
 # TODO: This section is incomplete and unused. Cannot figure out why it doesn't work.
@@ -277,7 +278,7 @@ def LinkTexturesToMaterials():
                 prop = mat.FindProperty(fbx_prop)
                 if prop.IsValid():
                     prop.ConnectSrcObject(fbx_tex)
-
+"""
 
 # ================================================================================================================
 # Create Skeleton Function
@@ -336,7 +337,7 @@ def CreateSkeleton(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene) -> dict[int, 
 # For skinned meshes, weight information is actually handled in the vertex color attributes. Must have been an efficiency measure from Crystal Dynamics that Aspyr used
 # This information is more readily present once you look at the shader. Level Geometry uses a different shader and uses the information for other purposes
 # ================================================================================================================
-def SkinMesh(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene, WorkingMesh: fbx.FbxMesh, WorkingNode: fbx.FbxNode, NodeMap: dict[int, fbx.FbxNode]):
+def SkinMesh(SourceFile: SrmFile, WorkingScene: fbx.FbxScene, WorkingMesh: fbx.FbxMesh, WorkingNode: fbx.FbxNode, NodeMap: dict[int, fbx.FbxNode]):
     global SceneManager, OutputString
 
     OutputString += "\nBeginning skinning process. Adding Skin Clusters"
@@ -380,7 +381,7 @@ def SkinMesh(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene, WorkingMesh: fbx.Fb
     OutputString += "\nCreating Bind Pose for Mesh"
     
     #Create a new bind pose and add mesh to it
-    BindPose = fbx.FbxPose.Create(WorkingRoot, "BindPose")
+    BindPose = fbx.FbxPose.Create(WorkingScene, "BindPose")
     BindPose.SetIsBindPose(True)
     BindPose.Add(WorkingNode, ConvertMatrixType(BindMatrix))
     
@@ -389,7 +390,7 @@ def SkinMesh(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene, WorkingMesh: fbx.Fb
         BindPose.Add(BoneNode, ConvertMatrixType(BoneNode.EvaluateGlobalTransform()))
     
     #Assign bind pose
-    WorkingRoot.AddPose(BindPose)
+    WorkingScene.AddPose(BindPose)
 
     OutputString += "\nBind Pose assigned, Skinning complete."
 
@@ -401,7 +402,7 @@ def SkinMesh(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene, WorkingMesh: fbx.Fb
 # Returns an FBX Scene on success, null on failure
 # Optionally returns the Output String
 # ================================================================================================================
-def SrmToFBX(ReaverFilePath: Path, FileManager: fbx.FBXManager, GiveOutput: bool) -> tuple[fbx.FbxScene | None, str]:
+def SrmToFBX(ReaverFilePath: Path, FileManager: fbx.FbxManager, GiveOutput: bool) -> tuple[fbx.FbxScene | None, str]:
     global SceneManager, OutputString 
     SceneManager = FileManager
     OutputString = "Beginning Conversion of SRM File"
@@ -414,7 +415,7 @@ def SrmToFBX(ReaverFilePath: Path, FileManager: fbx.FBXManager, GiveOutput: bool
     #Initialize the FBX Scene and retrieve the Scene Root and Mesh 
     TheScene = InitializeScene(ReaverFilePath)
     if TheScene is not None:
-        OurSceneRoot, SceneNode, SceneMesh = TheScene
+        OurScene, OurSceneRoot, SceneNode, SceneMesh = TheScene
     else:
         return None, OutputString
     
@@ -431,7 +432,10 @@ def SrmToFBX(ReaverFilePath: Path, FileManager: fbx.FBXManager, GiveOutput: bool
         return None, OutputString
 
     #Skin the mesh and add its bind pose
-    SkinMesh(OurFile,OurSceneRoot,SceneMesh,SceneNode,BoneNodeMap)
+    SkinMesh(OurFile,OurScene,SceneMesh,SceneNode,BoneNodeMap)
 
     #We have our new FBX File!
-    return TheScene, OutputString
+    if GiveOutput:
+        return OurScene, OutputString
+    else:
+        return OurScene, None
