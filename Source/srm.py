@@ -137,11 +137,13 @@ class Bones:
 
     @classmethod
     def from_stream(cls, stream) -> "Bones":
+        unknown = int.from_bytes(stream.read(4),"little")               # Hacky fix
         bone_list = []
         for _ in range(0x80):
             bone_pos = unpack("<3f", stream.read(0xc))
             # inverted y, z for some reason?
             bone_list.append((bone_pos[0], bone_pos[1], bone_pos[2]))
+        stream.read(unknown * 0x30 + 4)                                 # Hacky Fix
         active_bones = unpack("128?", stream.read(0x80))
         return cls(bone_list, active_bones)
 
@@ -172,7 +174,6 @@ class SrmFile:
         with open(path, "rb") as stream:
             header = Header.from_stream(stream)
             texture_palette = TexturePalette.from_stream(stream)
-            stream.read(4) # delim? padding?
             bones = Bones.from_stream(stream)
             buffer = DisplayBuffer.from_stream(stream)
 
