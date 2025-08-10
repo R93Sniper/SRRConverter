@@ -1,3 +1,11 @@
+"""
+This file was created for the SRRConverter project
+License: GPLv3
+
+Description: Defines the SRM file structure
+Author: Zatarita
+"""
+
 from dataclasses import dataclass
 from struct import unpack
 from enum import IntFlag
@@ -137,23 +145,22 @@ class Bones:
 
     @classmethod
     def from_stream(cls, stream) -> "Bones":
-        unknown = int.from_bytes(stream.read(4),"little")               # Hacky fix
-        bone_list = []
-        for _ in range(0x80):
-            bone_pos = unpack("<3f", stream.read(0xc))
-            # inverted y, z for some reason?
-            bone_list.append((bone_pos[0], bone_pos[1], bone_pos[2]))
-        stream.read(unknown * 0x30 + 4)                                 # Hacky Fix
-        active_bones = unpack("128?", stream.read(0x80))
-        return cls(bone_list, active_bones)
+        # Unknown found in some files - Hacky fix for now
+        unknown = int.from_bytes(stream.read(4),"little")
 
-    def get_bone(self, index: int) -> tuple[float, float, float]:
-        if index > 0x80:
-            return None
-        if self.active_bones[index]:
-            return self.bone_list[index]
-        else:
-            return None
+        bone_list = [unpack("<3f", stream.read(0xc)) for _ in range(0x80)]
+
+        # Unkown influences this data array size - Hacky fix for now
+        if unknown > 0:
+            stream.read(unknown * 0x30 + 4)
+
+        active_bones = unpack("128?", stream.read(0x80))
+
+        # Filter out unused bones - The fix is ready if you want to 
+        # push it to avoid keeping track of skipped bones
+        #
+        # bone_list = [bone_list[i] for i in range(0x80) if active_bones[i]]
+        return cls(bone_list, active_bones)
     
 @dataclass
 class SrmFile:
