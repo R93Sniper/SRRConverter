@@ -11,7 +11,7 @@ To combat this, the .hry format was created. The hry file will supply the parent
 relationship for bones. In order for it to do that we, as people, must look at the skeleton
 and create the hierachy. That is done using a yaml file, the definition of which is simple
 
-Filename: <NameOfFile>
+Filename: <NameOfFile>      # do not include the extension
 Version: 1                  # In case of future revisions
 Bones:
   <NameOfBone>:
@@ -208,4 +208,5 @@ def buildDefinitions():
     
     print("Saving hry file")
     hry_file.toFile(DEFINITIONS_FILE)
+
 
