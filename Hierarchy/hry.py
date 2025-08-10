@@ -53,7 +53,7 @@ class HryBone:
     name: str = ""
     parent: int = 0
     
-    def to_file(self, stream):
+    def toFile(self, stream):
         stream.write(len(self.name).to_bytes(1, "little"))
         stream.write(self.name.encode("ascii"))
         if self.parent is not None:
@@ -62,7 +62,7 @@ class HryBone:
             stream.write(b'\xFF')
 
     @classmethod
-    def from_stream(cls, file):
+    def fromStream(cls, file):
         ret = cls()
         ret.name = file.read(int.from_bytes(file.read(1), "little")).decode("ascii")
         ret.parent = int.from_bytes(file.read(1), "little")
@@ -78,7 +78,7 @@ class HryEntry:
     bones: dict[int, HryBone] = field(default_factory=dict)
 
     @classmethod
-    def from_yaml(cls, path: Path):
+    def fromYaml(cls, path: Path):
         with open(path, "r") as file:
             ret = cls()
             yaml_data = yaml.safe_load(file)
@@ -101,7 +101,7 @@ class HryEntry:
                 ret.bones[yaml_data["Bones"][bone]["ID"]] = HryBone(bone, yaml_data["Bones"][bone]["Parent"])
         return ret
     
-    def to_stream(self, stream):
+    def toStream(self, stream):
         stream.write(HRY_ENTRY_SIG)
         stream.write(self.version.to_bytes(1, "little"))
         stream.write(len(self.name).to_bytes(1, "little"))
@@ -110,10 +110,10 @@ class HryEntry:
 
         for id, bone in self.bones.items():
             stream.write(id.to_bytes(1, "little"))
-            bone.to_file(stream)
+            bone.toFile(stream)
             
     @classmethod
-    def from_stream(cls, file):
+    def fromStream(cls, file):
         ret = cls()
         sig = file.read(4)
         if sig != HRY_ENTRY_SIG:
@@ -123,20 +123,26 @@ class HryEntry:
         bone_count = int.from_bytes(file.read(1), "little")
         for _ in range(bone_count):
             id = int.from_bytes(file.read(1), "little")
-            bone = HryBone.from_stream(file)
+            bone = HryBone.fromStream(file)
             ret.bones[id] = bone
         return ret
+    
+    def get_root(self):
+        for bone in self.bones.values():
+            if bone.parent is None:
+                return bone
+        return None
 
 HRY_SIG = b'hry\x00'
 @dataclass
 class HryFile:
     definitions: dict[str, HryEntry] = field(default_factory=dict)
 
-    def import_yaml(self, path: Path):
-        new_entry = HryEntry.from_yaml(path)
+    def importYaml(self, path: Path):
+        new_entry = HryEntry.fromYaml(path)
         self.definitions[new_entry.name] = new_entry
 
-    def to_file(self, path: Path):
+    def toFile(self, path: Path):
         path.parent.mkdir(exist_ok=True, parents=True)
         with open(path, "wb") as file:
             offset_table = BytesIO()
@@ -149,13 +155,13 @@ class HryFile:
             first_offset = file.tell() + (4 * len(self.definitions))
             for definition in self.definitions.values():
                 offset_table.write((len(data.getbuffer()) + first_offset).to_bytes(4, "little"))
-                definition.to_stream(data)
+                definition.toStream(data)
             file.write(offset_table.getbuffer())
             file.write(data.getbuffer())
 
 
     @classmethod
-    def from_file(cls, path: Path):
+    def fromFile(cls, path: Path):
         with open(path, "rb") as file:
             ret = cls()
             sig = file.read(4)
@@ -166,39 +172,39 @@ class HryFile:
             offsets = [int.from_bytes(file.read(4), "little") for _ in range(count)]
             for i in range(count):
                 file.seek(offsets[i])
-                ret.definitions[filenames[i]] = HryEntry.from_stream(file)
+                ret.definitions[filenames[i]] = HryEntry.fromStream(file)
         return ret
     
 DEFINITIONS_PATH = Path("Definitions")
 DEFINITIONS_FILE = Path("hierarchy_information.hry")
 
-def load_definitions():
+def loadDefinitions():
     print("Checking for existing hierarchy definition file...")
     if not DEFINITIONS_FILE.exists():
         print("\tExisting hry not found - Creating a new one")
         return HryFile()
     else:
         print(f"\tExisting hry found - Loading {DEFINITIONS_FILE}")
-        return HryFile.from_file(DEFINITIONS_FILE)
+        return HryFile.fromFile(DEFINITIONS_FILE)
 
-def build_definitions():
+def buildDefinitions():
     print("Building skeleton hierarchy definiton file...")
     if not DEFINITIONS_PATH.exists():
         print("Definitions folder does not exist! Please place all yaml files in a folder named 'Definitions'")
         return
     
-    hry_file = load_definitions()
+    hry_file = loadDefinitions()
     
     print("Importing new definitions...")
     yaml_files = [f for f in DEFINITIONS_PATH.iterdir() if f.is_file() and f.suffix.lower() in [".yml", ".yaml"]]
     for yaml_file in yaml_files:
         print(f"\tImporting {yaml_file}: ", end="")
         try:
-            hry_file.import_yaml(yaml_file)
+            hry_file.importYaml(yaml_file)
             print("Done!")
         except Exception as e:
             print(f"Failed - {e}")
 
     
     print("Saving hry file")
-    hry_file.to_file(DEFINITIONS_FILE)
+    hry_file.toFile(DEFINITIONS_FILE)
