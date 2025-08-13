@@ -1,6 +1,6 @@
 from pathlib import Path
 import fbx
-from SRMToFBX import SrmToFBX
+from Source.SRMToFBX import SrmToFBX
 
 class BatchConverter:
     """
@@ -27,34 +27,36 @@ class BatchConverter:
     INPUT_DIR = Path("Input")
     OUTPUT_DIR = Path("Output")
 
-    # ================================================================================================================
-    # Create Output File Function
-    # Print the output log as a file
-    # ================================================================================================================
     def CreateOutputFile(self, FileName: str, OutputString: str):
+        """
+        Create Output File Function
+        Print the output log as a file
+        """
+
         with open(FileName, "w", encoding="utf-8") as file:
             file.write(OutputString)
 
-    # ================================================================================================================
-    # Convert Textures Function
-    # Use TexConv to Convert textures from Input/Textures to Output/{Filename}
-    # TODO 1: Actually implement this function
-    # TODO 2: Let people pick what image type they want to convert to
-    # ================================================================================================================
+
     def ConvertTextures():
+        """
+        Convert Textures Function
+        Use Pillow to Convert textures from Input/Textures to Output/{Filename}
+        TODO 1: Actually implement this function
+        TODO 2: Let people pick what image type they want to convert to
+        """
+
         print("Stub Function!")
 
-        #Zata told me to add these to my class, so you get this
-        # import subproccess
-        # subproccess.run(["texconv.exe", "-ft", "png", "-o", outdirectory, *filenames])
+        #We're going to use Pillow for this. 
 
 
-    # ================================================================================================================
-    # Convert File To FBX Function
-    # Converts all SRM files in Input\SRM to FBX and Outputs them to Output\
-    # Generates a log if requested.
-    # ================================================================================================================
     def ConvertFileToFBX(self, GenerateLog: bool, FilesInDirectory: list[Path]):
+        """
+        Convert File To FBX Function
+        Converts all SRM files in Input\SRM to FBX and Outputs them to Output\
+        Generates a log if requested.
+        """
+
         #Create an FBX Manager
         print("Attempting to create FBX Manager")
         OurFileManager = fbx.FbxManager.Create()
@@ -104,12 +106,14 @@ class BatchConverter:
         print("\nAll files converted, cleaning up FBX Manager.")
         OurFileManager.Destroy()
 
-    # ================================================================================================================
-    # Convert Model Files
-    # Start the Process to convert SRM files
-    # TODO 1:  Allow conversion of other file formats
-    # ================================================================================================================
+
     def ConvertModelFiles(self):
+        """
+        Convert Model Files
+        Start the Process to convert SRM files
+        TODO 1:  Allow conversion of other file formats (ie smd/gltf)
+        """
+
         ValidInput = False
         GenerateLog: bool
         
@@ -154,20 +158,21 @@ class BatchConverter:
         exit(0)
 
         
-    # ================================================================================================================
-    # Batch Convert Function
-    # Main App Function
-    # Given some user inputs, batch convert the files
-    # TODO 1: Implement conversion of SRA Files
-    # TODO 2: Implement conversion of SRL Files 
-    # ================================================================================================================
     def BatchConvert(self):
+        """
+        Batch Convert Function
+        Main App Function
+        Given some user inputs, batch convert the files
+        TODO 1: Implement conversion of SRA Files
+        TODO 2: Implement conversion of SRL Files
+        """
+
         ValidInput = False
 
         #Ask User what kind of filetype to convert
         while not ValidInput:
             print("Pick a filetype to convert:")
-            print("1) Soul Reaver Model (SRM)\n2) Soul Reaver Animation? (SRA)\n3) Soul Reaver L (SRL)\n4) Exit")
+            print("1) Soul Reaver Model (SRM)\n2) Soul Reaver Animation (SRA)\n3) Soul Reaver Lipsync (SRL)\n4) Exit")
             FileTypeToConvert = input("")
 
             #Convert files based on type
@@ -188,11 +193,12 @@ class BatchConverter:
                 print("Invalid Response, Select a valid Response.")
 
 
-# ================================================================================================================
-# Instantiation Function
-# Starts the main function when run in Terminal.
-# This is weird python shit, Don't ask me.
-# ================================================================================================================
 if __name__ == "__main__":
+    """
+    Instantiation Function
+    Starts the main function when run in Terminal.
+    This is weird python shit, Don't ask me.
+    """
+
     Converter = BatchConverter()
     Converter.BatchConvert()

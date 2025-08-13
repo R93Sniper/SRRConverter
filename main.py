@@ -1,6 +1,6 @@
 from pathlib import Path
 import fbx
-from ConvertSRM import convert_srm_to_fbx
+from Source.ConvertSRM import convert_srm_to_fbx
 
 INPUT_DIR = Path("Input/SRM")
 OUTPUT_DIR = Path("Output")
