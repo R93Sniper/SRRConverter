@@ -120,7 +120,7 @@ class BatchConverter:
         #Check to see if our user wants to generate an output log
         print("Do you want a log to be generated?")
         while not ValidInput:
-            Response = input("")
+            Response = input()
             if Response.lower() in ("yes","y","true"):
                 GenerateLog = True
                 ValidInput = True
@@ -172,8 +172,7 @@ class BatchConverter:
         #Ask User what kind of filetype to convert
         while not ValidInput:
             print("Pick a filetype to convert:")
-            print("1) Soul Reaver Model (SRM)\n2) Soul Reaver Animation (SRA)\n3) Soul Reaver Lipsync (SRL)\n4) Exit")
-            FileTypeToConvert = input("")
+            FileTypeToConvert = input()
 
             #Convert files based on type
             if FileTypeToConvert == "1":
@@ -190,7 +189,7 @@ class BatchConverter:
                 print("Exiting")
                 exit(1)
             else:
-                print("Invalid Response, Select a valid Response.")
+                print("Select from the following: \n1) Soul Reaver Model (SRM)\n2) Soul Reaver Animation (SRA)\n3) Soul Reaver Lipsync (SRL)\n4) Exit.")
 
 
 if __name__ == "__main__":
