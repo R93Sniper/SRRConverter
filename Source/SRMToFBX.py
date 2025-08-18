@@ -5,9 +5,11 @@ import fbx
 # ================================================================================================================
 # SRM To FBX Converter Class
 #
-# This file is the "Converter" part of the pipeline. The files in the Source\ folder are the "Parser" parts of the pipeline.
+# This file is the "Converter" part of the pipeline. The `srm.py` file is the "Parser" parts of the pipeline.
 # We convert a given SRM file to an FBX File. Optionally, we feed the output logs into a string to be converted into a debug text file.
-# Because I'm petty as all hell, Everything is going to be written in PascalCase. I hate snake case. 
+# Because I'm petty as all hell, Everything is going to be written in PascalCase. I hate snake case.
+# TODO 1: Convert this into a class with all the core data being member variables
+# TODO 2: Remove OutputString and do proper logging (Notice: I didn't know this was a thing) 
 # ================================================================================================================
 
 #String for any logging statements. Just append to this so we can throw this at a file
@@ -17,24 +19,24 @@ OutputString: str = ""
 SceneManager: fbx.FbxManager
 
 
-# ================================================================================================================
-# Convert Matrix Type Function
-# Converts a given aFBXMatrix to a regular FBXMatrix. Helper Function, since some python bindings don't accept AMatrixs as input.
-# Also I know the plural of Matrix is Matricies but that sounds weird to type here
-# ================================================================================================================
 def ConvertMatrixType(MatrixToConvert: fbx.FbxAMatrix) -> fbx.FbxMatrix:
+    """
+    Convert Matrix Type Function
+    Converts a given aFBXMatrix to a regular FBXMatrix. Helper Function, since some python bindings don't accept AMatrixs as input.
+    Also I know the plural of Matrix is Matricies but that sounds weird in context here
+    """
     ConvertedMatrix = fbx.FbxMatrix()
     for row in range(4):
         for col in range(4):
             ConvertedMatrix.Set(row, col, MatrixToConvert.Get(row, col))
     return ConvertedMatrix
 
-# ================================================================================================================
-# Parse Soul Reaver Model Function
-# Given a file path, look for a SRM file there.
-# If we can parse a SRM file, return it. Else return null.  
-# ================================================================================================================
 def ParseSRM(PathToFile: Path) -> SrmFile | None:
+    """
+    Parse Soul Reaver Model Function
+    Given a file path, look for a SRM file there.
+    If we can parse a SRM file, return it. Else return null. 
+    """
     global OutputString
     OutputString += "\nParsing SRM File"
     try:
@@ -45,12 +47,12 @@ def ParseSRM(PathToFile: Path) -> SrmFile | None:
         OutputString += f"\nFailed to parse SRM file: {e}"
         return None
 
-# ================================================================================================================
-# Initialize FBX Scene Function
-# Create the Scene in our FBXManager to start building the mesh
-# We return the Scene and our Mesh if we can build it. Else we return null
-# ================================================================================================================
 def InitializeScene(PathToFile: Path) -> tuple[fbx.FbxScene, fbx.FbxNode, fbx.FbxNode, fbx.FbxMesh] | None:
+    """
+    Initialize FBX Scene Function
+    Create the Scene in our FBXManager to start building the mesh
+    We return the Scene and our Mesh if we can build it. Else we return null
+    """
     global SceneManager, OutputString
 
     OurScene = fbx.FbxScene.Create(SceneManager, PathToFile.stem)
@@ -77,13 +79,13 @@ def InitializeScene(PathToFile: Path) -> tuple[fbx.FbxScene, fbx.FbxNode, fbx.Fb
         OutputString += "\nFailed to create mesh or mesh node."
         return None
     
-        
-# ================================================================================================================
-# Create Vertices Function
-# Intialize the mesh's vertices, set their positions, and then apply their normals
-# The big gotcha with this is that vertex normals are bytes, so we need to normalize them
-# ================================================================================================================
+
 def CreateVertices(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh) -> fbx.FbxLayer:
+    """
+    Create Vertices Function
+    Intialize the mesh's vertices, set their positions, and then apply their normals
+    The big gotcha with this is that vertex normals are bytes, so we need to normalize them
+    """
     global OutputString
 
     #Initialize Vertex Array
@@ -122,14 +124,13 @@ def CreateVertices(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh) -> fbx.FbxLaye
     return MeshLayer
 
 
-
-# ================================================================================================================
-# Process Triangle Information Function
-# Apply Unwrap Data, Consolidate Materials, Create Triangles, and Assigns Materials to the triangles
-# This would have otherwise been four functions but they share so much data that its not worth it.
-# Luckily, we can be smart about how we write things out
-# ================================================================================================================
 def ProcessTriangleInfo(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh, WorkingNode: fbx.FbxNode, WorkingLayer: fbx.FbxLayer):
+    """
+    Process Triangle Information Function
+    Apply Unwrap Data, Consolidate Materials, Create Triangles, and Assigns Materials to the triangles
+    This would have otherwise been four functions but they share so much data that its not worth it.
+    Luckily, we can be smart about how we write things out
+    """
     global SceneManager, OutputString
 
     # ============================= #
@@ -199,10 +200,8 @@ def ProcessTriangleInfo(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh, WorkingNo
         #Every vertex in the created triangle
         for j in tri:
             vert = SourceFile.display_buffer.vertices[j]
-            
-            #For some reason the UVs are quad-cut around [0,1]. Modulo forces their coords back to 0-1 space
-            u = (vert.u / 255.0) % 1.0
-            v = (vert.v / 255.0) % 1.0
+            u = vert.u / 255.0
+            v = vert.v / 255.0
            
             #Create a unique UV location per vertex. Prevents seam errors
             key = (j, (u, v))
@@ -280,13 +279,14 @@ def LinkTexturesToMaterials():
                     prop.ConnectSrcObject(fbx_tex)
 """
 
-# ================================================================================================================
-# Create Skeleton Function
-# Create a Root skeleton node and then only add bones that actually have skinning data.
-# Currently parents everything to the root. SRM files don't seem to store the heirarchy information at all.
-# TODO: Read Zata's YAML file system to build the heirarchy.
-# ================================================================================================================
+
 def CreateSkeleton(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene) -> dict[int, fbx.FbxNode]:
+    """
+    Create Skeleton Function
+    Create a Root skeleton node and then only add bones that actually have skinning data.
+    Currently parents everything to the root. SRM files don't seem to store the heirarchy information at all.
+    TODO: Read Zata's YAML file system to build the heirarchy.
+    """
     global SceneManager, OutputString
 
     OutputString += "\nCreating Skeleton"
@@ -331,13 +331,14 @@ def CreateSkeleton(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene) -> dict[int, 
     OutputString += f"\nSkeleton successfully created with {SkippedBones} null bones skipped"
     return NodeMap
 
-# ================================================================================================================
-# Skin Mesh Function
-# Take the mesh and apply weights based on information from SRM file. Add the bind pose once mesh is skinned.
-# For skinned meshes, weight information is actually handled in the vertex color attributes. Must have been an efficiency measure from Crystal Dynamics that Aspyr used
-# This information is more readily present once you look at the shader. Level Geometry uses a different shader and uses the information for other purposes
-# ================================================================================================================
+
 def SkinMesh(SourceFile: SrmFile, WorkingScene: fbx.FbxScene, WorkingMesh: fbx.FbxMesh, WorkingNode: fbx.FbxNode, NodeMap: dict[int, fbx.FbxNode]):
+    """
+    Skin Mesh Function
+    Take the mesh and apply weights based on information from SRM file. Add the bind pose once mesh is skinned.
+    For skinned meshes, weight information is actually handled in the vertex color attributes. Must have been an efficiency measure from Crystal Dynamics that Aspyr used
+    This information is more readily present once you look at the shader. Level Geometry uses a different shader and uses the information for other purposes
+    """
     global SceneManager, OutputString
 
     OutputString += "\nBeginning skinning process. Adding Skin Clusters"
@@ -395,14 +396,14 @@ def SkinMesh(SourceFile: SrmFile, WorkingScene: fbx.FbxScene, WorkingMesh: fbx.F
     OutputString += "\nBind Pose assigned, Skinning complete."
 
 
-# ================================================================================================================
-# SRM To FBX Function
-# Main function to actually convert files
-# We need a path to the file and the FBX Scene Manager to process the data
-# Returns an FBX Scene on success, null on failure
-# Optionally returns the Output String
-# ================================================================================================================
 def SrmToFBX(ReaverFilePath: Path, FileManager: fbx.FbxManager, GiveOutput: bool) -> tuple[fbx.FbxScene | None, str]:
+    """
+    SRM To FBX Function
+    Main function to actually convert files
+    We need a path to the file and the FBX Scene Manager to process the data
+    Returns an FBX Scene on success, null on failure
+    Optionally returns the Output String
+    """
     global SceneManager, OutputString 
     SceneManager = FileManager
     OutputString = "Beginning Conversion of SRM File"
