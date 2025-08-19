@@ -83,7 +83,7 @@ class TextureEntry:
 @dataclass
 class TexturePalette:
     """ Holds all the textures used by the model """
-    textures: list[TextureEntry]
+    materials: list[TextureEntry]
 
     @classmethod
     def from_stream(cls, stream) -> "TexturePalette":
@@ -166,7 +166,7 @@ class Bones:
 class SrmFile:
     """ Highest level structure, pulls all the parts together """
     header: Header
-    texture_palette: TexturePalette
+    material_palette: TexturePalette
     bones: Bones
     display_buffer: DisplayBuffer
 

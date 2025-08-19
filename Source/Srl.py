@@ -11,7 +11,7 @@ from struct import unpack, pack
 from pathlib import Path
 
 class HeaderMismatch(Exception):
-    """Exception raised for SRM header mismatch."""
+    """Exception raised for SRL header mismatch."""
 
     def __init__(self, got):
         self.message = "Passed file does not contain a valid header"

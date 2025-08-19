@@ -7,22 +7,22 @@ Decription:   Convert a texture DDS texture into another image type for ease of 
 3D Modeling Software that doesn't support DDS DX10 textures
 """
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+import logging
 
-class ConvertTextures:
-    def __init__(self, logger=None):
+class TextureConverter:
+    def __init__(self, fmt="PNG", logger=None):
+        self.format = fmt
         if logger:
             self.logger = logger
         else:
             # Fallback to its own logger
-            import logging
-            self.logger = logging.getLogger("ConvertTextures")
+            self.logger = logging.getLogger(TextureConverter.__name__)
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
             self.logger.addHandler(handler)
-            self.logger.setLevel(logging.DEBUG)
     
-    def convertTexture(self, texture_in_path, texture_out_path, format="PNG") -> bool:
+    def convertTexture(self, texture_in_path, texture_out_path) -> bool:
         """
         # Valid formats
         (Some excluded due to needing additional parameters/being ill suited for this purpose)
@@ -53,8 +53,14 @@ class ConvertTextures:
         """
         try:
             with Image.open(texture_in_path) as image:
-                image.save(texture_out_path, format=format)
+                image.save(texture_out_path, format=self.format)
             return True
-        except Exception as e:
-            self.logger.warning(f"Failed to convert {texture_in_path} -> {texture_out_path}: {e}")
+        except FileNotFoundError:       # Bad path
+            self.logger.error(f"Failed to locate file: {texture_in_path}")
+            return False
+        except UnidentifiedImageError:  # Bad input format
+            self.logger.error(f"Failed to load file [{texture_in_path}] - Reason: Unsupported format")
+            return False
+        except TypeError:               # Bad output format
+            self.logger.error(f"Failed to save file [{self.fmt}] - Reason: Unsupported Format")
             return False
