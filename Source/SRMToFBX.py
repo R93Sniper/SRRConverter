@@ -1,13 +1,16 @@
+"""This file was created for SRRConveter project
+License: GPLv3
+Author: R93 Sniper
+Description: SRM To FBX Converter Class
+    This file is the "Converter" part of the pipeline. The `srm.py` file is the "Parser" parts of the pipeline.
+    We convert a given SRM file to an FBX File. Optionally, we feed the output logs into a string to be converted into a debug text file.
+"""
+
 from pathlib import Path
 from Source.srm import SrmFile
 import fbx
 
 # ================================================================================================================
-# SRM To FBX Converter Class
-#
-# This file is the "Converter" part of the pipeline. The `srm.py` file is the "Parser" parts of the pipeline.
-# We convert a given SRM file to an FBX File. Optionally, we feed the output logs into a string to be converted into a debug text file.
-# Because I'm petty as all hell, Everything is going to be written in PascalCase. I hate snake case.
 # TODO 1: Convert this into a class with all the core data being member variables
 # TODO 2: Remove OutputString and do proper logging (Notice: I didn't know this was a thing) 
 # ================================================================================================================
