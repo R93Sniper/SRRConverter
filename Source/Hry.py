@@ -175,7 +175,7 @@ class HryFile:
                 ret.definitions[filenames[i]] = HryEntry.fromStream(file)
         return ret
     
-DEFINITIONS_PATH = Path("Definitions")
+DEFINITIONS_PATH = Path("Input/Definitions")
 DEFINITIONS_FILE = Path("hierarchy_information.hry")
 
 def loadDefinitions():
