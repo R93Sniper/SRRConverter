@@ -14,6 +14,7 @@ from pathlib import Path
 import fbx
 from Source.SRMToFBX import SrmToFBX
 from Source.Hry import buildDefinitions
+from Source.ConvertTextures import ConvertTextures
 
 class BatchConverter:
 
@@ -42,17 +43,78 @@ class BatchConverter:
             file.write(OutputString)
 
 
-    def ConvertTextures():
+    def ConvertTextureFiles(self):
         """
         Convert Textures Function
-        Use Pillow to Convert textures from Input/Textures to Output/{Filename}
-        TODO 1: Actually implement this function
-        TODO 2: Let people pick what image type they want to convert to
+        Use Pillow to Convert textures from Input/Textures to Output/Textures
         """
+        #Search Texture directory without case sensitivity. #JustLinuxThings
+        TexDir = next((SubPath for SubPath in BatchConverter.INPUT_DIR.iterdir() if SubPath.is_dir() and SubPath.name.lower() == "textures"), None)
 
-        print("Stub Function!")
+        #Check to ensure our input directory exists. If it doesn't, create it and exit
+        if not TexDir.exists():
+            TexDir.mkdir(parents=True, exist_ok=True)
+            print("Texture Subdirectory does not exist, Creating it now. Put textures in directory and try again.")
+            exit(2)
 
-        #We're going to use Pillow for this. 
+        #Confirm that we actually have textures in our directory
+        TexturesInDirectory = [f for f in TexDir.iterdir() if f.is_file() and f.suffix.lower() == ".dds"]
+        if not TexturesInDirectory:
+            print("No SRM files in directory. Add some files and try again.")
+            exit(3)
+        else:
+            print(f"Discovered {len(TexturesInDirectory)} dds file(s).")
+
+        #Check if our output directory exists. If not, create it and notify the user.
+        OutDir = BatchConverter.OUTPUT_DIR / "Textures"
+        if not OutDir.exists():
+            OutDir.mkdir(parents=True, exist_ok=True)
+            print("Texture Output directory not found, creating folder.")
+
+        
+        ValidInput = False #Loop Condition variable
+        TexType = "" #Keeping track of what texture type we want
+
+        #Ask User what kind of filetype to convert
+        while not ValidInput:
+            print("Choose a filetype to convert to:\n1) PNG\n2) TGA\n3) DDS\n4) TIFF")
+            FileTypeToConvert = input()
+
+            if FileTypeToConvert.lower() in ("png", "1"):
+                print("Converting textures to PNG")
+                TexType = "PNG"
+                ValidInput = True
+            elif FileTypeToConvert.lower() in ("tga", "2"):
+                print("Converting textures to TGA")
+                TexType = "TGA"
+                ValidInput = True
+            elif FileTypeToConvert.lower() in ("dds", "3"):
+                print("Converting textures to Non-DX10 DDS")
+                TexType = "DDS"
+                ValidInput = True
+            elif FileTypeToConvert.lower() in ("tif", "tiff", "4"):
+                print("Converting textures to TIFF")
+                TexType = "TIFF"
+                ValidInput = True
+            else:
+                print("Invalid Selection, Pick one of the following by name or number:\n1) PNG\n2) TGA\n3) DDS\n4) TIFF")
+
+        #Creating an instance of the ConvertTextures class so we get a logger
+        TextureLogger = ConvertTextures()
+
+        #Actually convert each of the textures 
+        for i in TexturesInDirectory:
+            print(f"\nAttempting to convert {i.name} to {TexType}")
+            FileState = TextureLogger.convertTexture(i,OutDir / f"{i.stem}.{TexType}",TexType)
+
+            if FileState:
+                print(f"Successfully converted {i.name}!")
+            else:
+                print(f"Could not convert {i.name}!")
+
+        #We're done!
+        print ("All textures converted. Exiting")
+        exit(0)
 
 
     def ConvertFileToFBX(self, GenerateLog: bool, FilesInDirectory: list[Path]):
@@ -144,7 +206,7 @@ class BatchConverter:
         #Check to ensure our input directory exists. If it doesn't, create it and exit
         if not InputSubdir.exists():
             InputSubdir.mkdir(parents=True, exist_ok=True)
-            print("SRM Subdirectory does not exist. Creating it now. Put SRM files in directory")
+            print("SRM Subdirectory does not exist, Creating it now. Put SRM files in directory and try again.")
             exit(2)
         
         #Check all the files in the SRM Directory. If we don't find any, exit
@@ -195,8 +257,9 @@ class BatchConverter:
                 ValidInput = True
                 buildDefinitions()
             elif FileTypeToConvert == "5":
-                print("Texture conversion not implemented, Exiting")
-                exit(1)
+                print("Converting Texture Files")
+                ValidInput = True
+                self.ConvertTextureFiles()
             elif FileTypeToConvert == "6":
                 print("Exiting")
                 exit(1)
