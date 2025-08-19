@@ -7,16 +7,15 @@ Description: Batch Converter Class
     SRA Files -> Input\SRA
     SRL Files -> Input\SRL
     Textures -> Input\Textures
+    Heirarchy Definitions -> Input\Definitions
 """
 
 from pathlib import Path
 import fbx
 from Source.SRMToFBX import SrmToFBX
+from Source.Hry import buildDefinitions
 
 class BatchConverter:
-    """
-
-    """
 
     # ================================================================================================================
     # Here's a list of Exit Codes
@@ -192,10 +191,17 @@ class BatchConverter:
                 print("SRL Support Incomplete, Exiting") #TODO 2
                 exit(1)
             elif FileTypeToConvert == "4":
+                print("Building Heirarchy Definitions from Input/Definitions")
+                ValidInput = True
+                buildDefinitions()
+            elif FileTypeToConvert == "5":
+                print("Texture conversion not implemented, Exiting")
+                exit(1)
+            elif FileTypeToConvert == "6":
                 print("Exiting")
                 exit(1)
             else:
-                print("Select from the following: \n1) Soul Reaver Model (SRM)\n2) Soul Reaver Animation (SRA)\n3) Soul Reaver Lipsync (SRL)\n4) Exit.")
+                print("Select from the following: \n1) Soul Reaver Model (SRM)\n2) Soul Reaver Animation (SRA)\n3) Soul Reaver Lines (SRL)\n4) Heirarchy Definitions\n5) Textures\n6) Exit")
 
 
 if __name__ == "__main__":
