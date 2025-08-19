@@ -26,3 +26,10 @@ Currently Supports the following:</br> </br>
 - Mesh Normals
 - Bone Transforms
 - Skin Weights
+
+**Texture Conversion**
+</br>Can convert the Soul Reaver textures to the following formats:
+- DDS (Non-DX10)
+- PNG
+- TGA
+- TIFF
