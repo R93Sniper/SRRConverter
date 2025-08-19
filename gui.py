@@ -1,3 +1,9 @@
+"""This file was created for SRRConveter project
+License: GPLv3
+Author: R93 Sniper
+Description: GUI worker script
+    Starts the GUI and handles the actual code execution
+"""
 import sys
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -9,6 +15,7 @@ import fbx
 from Source.SRMToFBX import SrmToFBX # FBX Converter Script 
 
 _debug = True  # Set to False to disable terminal debug prints (independent of GUI checkbox)
+_outputter = ""
 
 # Callback: Triggered when the "Input" button is clicked
 def on_click_input():
@@ -102,7 +109,7 @@ def on_click_export():
             print(f"[DEBUG] Starting export of: {srm_file}")
 
         # Convert SRM to FBX
-        scene = SrmToFBX(srm_file, manager)
+        scene, _outputter = SrmToFBX(srm_file, manager, False)
         if scene is None:
             error_msg = f"Failed to convert {srm_file.name}\n"
             print(error_msg)

@@ -1,15 +1,21 @@
+"""This file was created for SRRConveter project
+License: GPLv3
+Author: R93 Sniper
+Description: Batch Converter Class
+    Ask the user what files to convert and we shall convert them. All files to convert must be in their respective subfolders of Input\
+    SRM Files -> Input\SRM
+    SRA Files -> Input\SRA
+    SRL Files -> Input\SRL
+    Textures -> Input\Textures
+"""
+
 from pathlib import Path
 import fbx
 from Source.SRMToFBX import SrmToFBX
 
 class BatchConverter:
     """
-    Batch Converter Class
-    Ask the user what files to convert and we shall convert them. All files to convert must be in their respective subfolders of Input\
-    SRM Files -> Input\SRM
-    SRA Files -> Input\SRA
-    SRL Files -> Input\SRL
-    Textures -> Input\Textures
+
     """
 
     # ================================================================================================================
