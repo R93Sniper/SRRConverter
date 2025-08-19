@@ -1,4 +1,4 @@
-from Hierarchy.Hry import buildDefinitions
+from Source.Hry import buildDefinitions
 
 
 buildDefinitions()
