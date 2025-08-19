@@ -14,7 +14,7 @@ from pathlib import Path
 import fbx
 from Source.SRMToFBX import SrmToFBX
 from Source.Hry import buildDefinitions
-from Source.ConvertTextures import ConvertTextures
+from Source.ConvertTextures import TextureConverter
 
 class BatchConverter:
 
