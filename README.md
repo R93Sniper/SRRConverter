@@ -11,25 +11,4 @@ Purchase the games on your retailer of choice: </br>
 **Playstation**: https://www.playstation.com/en-us/games/legacy-of-kain-soul-reaver-1-2-remastered/ </br>
 **Luna**: https://luna.amazon.com/game/legacy-of-kain-soul-reaver-12-remastered/B0DVV9LMCW </br>
 
-# Pre-Requisites
-This was written with Python 3.10.18. Other python versions may work but have not been tested. </br> 
-For SRM to FBX, you need Autodesk's Python FBX SDK. This was built with version 2020.3.7, but might work with other versions. Get the SDK here: https://aps.autodesk.com/developer/overview/fbx-sdk
-
-
-# Feature Support
-Currently Supports the following:</br> </br>
-**SRM to FBX**
-- Vertices
-- Triangles
-- UVs
-- Material IDs
-- Mesh Normals
-- Bone Transforms
-- Skin Weights
-
-**Texture Conversion**
-</br>Can convert the Soul Reaver textures to the following formats:
-- DDS (Non-DX10)
-- PNG
-- TGA
-- TIFF
+### For Installation and Usage, check out the [Getting Started Guide](https://github.com/R93Sniper/SRRConverter/wiki/Getting-Started)
