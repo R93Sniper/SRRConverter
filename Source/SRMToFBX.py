@@ -8,6 +8,7 @@ Description: SRM To FBX Converter Class
 
 from pathlib import Path
 from Source.srm import SrmFile
+from Source.ConvertTextures import TextureConverter
 import fbx
 
 # ================================================================================================================
@@ -15,431 +16,370 @@ import fbx
 # TODO 2: Remove OutputString and do proper logging (Notice: I didn't know this was a thing) 
 # ================================================================================================================
 
-#String for any logging statements. Just append to this so we can throw this at a file
-OutputString: str = ""
+class FbxConverter:
 
-#Define our Scene manager so it can get accessed throughout the code
-SceneManager: fbx.FbxManager
+    def __init__(self):
+        #String for any logging statements. Just append to this so we can throw this at a file
+        self.OutputString: str = ""
 
-
-def ConvertMatrixType(MatrixToConvert: fbx.FbxAMatrix) -> fbx.FbxMatrix:
-    """
-    Convert Matrix Type Function
-    Converts a given aFBXMatrix to a regular FBXMatrix. Helper Function, since some python bindings don't accept AMatrixs as input.
-    Also I know the plural of Matrix is Matricies but that sounds weird in context here
-    """
-    ConvertedMatrix = fbx.FbxMatrix()
-    for row in range(4):
-        for col in range(4):
-            ConvertedMatrix.Set(row, col, MatrixToConvert.Get(row, col))
-    return ConvertedMatrix
-
-def ParseSRM(PathToFile: Path) -> SrmFile | None:
-    """
-    Parse Soul Reaver Model Function
-    Given a file path, look for a SRM file there.
-    If we can parse a SRM file, return it. Else return null. 
-    """
-    global OutputString
-    OutputString += "\nParsing SRM File"
-    try:
-        ParsedFile = SrmFile.from_file(PathToFile)
-        OutputString += "\nSRM file successfully parsed."
-        return ParsedFile
-    except Exception as e:
-        OutputString += f"\nFailed to parse SRM file: {e}"
-        return None
-
-def InitializeScene(PathToFile: Path) -> tuple[fbx.FbxScene, fbx.FbxNode, fbx.FbxNode, fbx.FbxMesh] | None:
-    """
-    Initialize FBX Scene Function
-    Create the Scene in our FBXManager to start building the mesh
-    We return the Scene and our Mesh if we can build it. Else we return null
-    """
-    global SceneManager, OutputString
-
-    OurScene = fbx.FbxScene.Create(SceneManager, PathToFile.stem)
-    
-    #Validate our Scene so we don't work with malformed data.
-    if OurScene:
-        OutputString += "\nSuccessfully created FBX Scene"
-    else:
-        OutputString += "\nFailed to create FBX scene."
-        return None
-    
-    #Get our scene root, create our mesh and to the root
-    SceneRoot = OurScene.GetRootNode()
-    MeshNode = fbx.FbxNode.Create(SceneManager, PathToFile.stem)
-    WorkingMesh = fbx.FbxMesh.Create(SceneManager, "Mesh")
-
-    #Validate that our mesh was created
-    if WorkingMesh and MeshNode:
-        MeshNode.SetNodeAttribute(WorkingMesh)
-        SceneRoot.AddChild(MeshNode)
-        OutputString += "\nMesh Created succesfully"
-        return OurScene, SceneRoot, MeshNode, WorkingMesh
-    else:
-        OutputString += "\nFailed to create mesh or mesh node."
-        return None
-    
-
-def CreateVertices(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh) -> fbx.FbxLayer:
-    """
-    Create Vertices Function
-    Intialize the mesh's vertices, set their positions, and then apply their normals
-    The big gotcha with this is that vertex normals are bytes, so we need to normalize them
-    """
-    global OutputString
-
-    #Initialize Vertex Array
-    VertexCount = len(SourceFile.display_buffer.vertices)
-    WorkingMesh.InitControlPoints(VertexCount)
-
-    #Apply positions to each vertex. FBX requires this to be a Vector4 for some reason
-    for i, vert in enumerate(SourceFile.display_buffer.vertices):
-        WorkingMesh.SetControlPointAt(fbx.FbxVector4(vert.x, vert.y, vert.z), i)
-
-    #Report back that the vertices have been created, in the event of a failure past this
-    OutputString += "\nCreated Vertices. Processing Vertex Normals."
-
-    #Create a Layer for the mesh so we can begin to apply the normals
-    MeshLayer = WorkingMesh.GetLayer(0)
-    if not MeshLayer:
-        WorkingMesh.CreateLayer()
-        MeshLayer = WorkingMesh.GetLayer(0)
-
-    #Create Element Normals they don't already exist on this layer
-    VertexNormals = MeshLayer.GetNormals()
-    if not VertexNormals:
-        VertexNormals = WorkingMesh.CreateElementNormal()
-
-    VertexNormals.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByControlPoint) #One Normal Per Vert
-    VertexNormals.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eDirect) #Ordered Data
-
-    #Normalize our Vertex Normals and apply them
-    for vert in SourceFile.display_buffer.vertices:
-        CompNormalX = (vert.normal_x / 255.0) * 2 - 1
-        CompNormalY = (vert.normal_y / 255.0) * 2 - 1
-        CompNormalZ = (vert.normal_z / 255.0) * 2 - 1
-        VertexNormals.GetDirectArray().Add(fbx.FbxVector4(CompNormalX, CompNormalY, CompNormalZ))
-
-    OutputString += "\nNormal Data applied to Vertices"
-    return MeshLayer
+        #Define common variables that get used throughout the code
+        self.SceneManager: fbx.FbxManager = None        # FBX Scene manager 
+        self.PathToFile: Path                           # Path to the SRM File
+        self.SourceFile: SrmFile = None                 # The actual SRM file that gets parsed
+        self.OurScene: fbx.FbxScene = None              # The "Scene" that is created for our FBX
+        self.RootNode: fbx.FbxNode = None               # The object that defines the origin of the scene
+        self.MeshNode: fbx.FbxNode = None               #
+        self.MeshLayer: fbx.FbxLayer = None             # The layers of the mesh. Needed for different elements (ie vertex normals)
+        self.WorkingMesh: fbx.FbxMesh = None            # The actual mesh we're creating and working on
+        self.NodeMap: dict[int, fbx.FbxNode] = None     # Mapping the Index of the bones to their FBX node. Required for skinning 
 
 
-def ProcessTriangleInfo(SourceFile: SrmFile, WorkingMesh: fbx.FbxMesh, WorkingNode: fbx.FbxNode, WorkingLayer: fbx.FbxLayer):
-    """
-    Process Triangle Information Function
-    Apply Unwrap Data, Consolidate Materials, Create Triangles, and Assigns Materials to the triangles
-    This would have otherwise been four functions but they share so much data that its not worth it.
-    Luckily, we can be smart about how we write things out
-    """
-    global SceneManager, OutputString
+    def ConvertMatrixType(MatrixToConvert: fbx.FbxAMatrix) -> fbx.FbxMatrix:
+        """
+        Convert Matrix Type Function
+        Converts a given aFBXMatrix to a regular FBXMatrix. Helper Function, since some python bindings don't accept AMatrixs as input.
+        Also I know the plural of Matrix is Matricies but that sounds weird in context here
+        """
+        ConvertedMatrix = fbx.FbxMatrix()
+        for row in range(4):
+            for col in range(4):
+                ConvertedMatrix.Set(row, col, MatrixToConvert.Get(row, col))
+        return ConvertedMatrix
 
-    # ============================= #
-    # Create UV Data                #
-    # ============================= #
 
-    OutputString += "\nBeginning UV Processing"
+    def ParseSRM(self):
+        """
+        Parse Soul Reaver Model Function
+        Given a file path, look for a SRM file there.
+        If we can parse a SRM file, return it. Else return null. 
+        """
+        OutputString += "\nParsing SRM File"
+        try:
+            self.SourceFile = SrmFile.from_file(self.PathToFile)
+            self.OutputString += "\nSRM file successfully parsed."
+        except Exception as e:
+            self.OutputString += f"\nFailed to parse SRM file: {e}"
+            return None
 
-    #Create a new layer for UVs
-    UnwrapLayer = WorkingLayer.GetUVs()
-    if not UnwrapLayer:
-        UnwrapLayer = WorkingMesh.CreateElementUV("UVSet")
 
-    #One UV Coordinate per vertex
-    UnwrapLayer.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByPolygonVertex) 
-    # Store UVs in a direct array, vertices can access the direct array through an Index array 
-    UnwrapLayer.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eIndexToDirect) 
+    def InitializeScene(self):
+        """
+        Initialize FBX Scene Function
+        Create the Scene in our FBXManager to start building the mesh
+        We return the Scene and our Mesh if we can build it. Else we return null
+        """
 
-    #Store the two arrays so we can access them later
-    UnwrapArrayDirect = UnwrapLayer.GetDirectArray()
-    UnwrapArrayIndexed = UnwrapLayer.GetIndexArray()
-
-    UnwrapMap = {}
-    
-    # ============================= #
-    # Consolidate Materials         #
-    # Note: This is very fragile    #
-    # ============================= #
-
-    OutputString += "\nPreprocessing Materials for Consolidation"
-
-    #Get all the material names that exist per polygon and toss them into a list. 
-    AllMaterials = []
-    for tri in SourceFile.display_buffer.indices:
-        MaterialId = SourceFile.display_buffer.vertices[tri[0]].texture_index - 1
-        if MaterialId < 0 or MaterialId >= len(SourceFile.texture_palette.textures):
-            OutputString += f"\nMaterial ID for {MaterialId+1} is Out of Range. Defaulting to 1"
-            MaterialId = 0
-        MatName = SourceFile.texture_palette.textures[MaterialId].name.strip()
-        AllMaterials.append(MatName)
-
-    #Build a list of all the UNIQUE material names in the order they appear 
-    UniqueMaterials = []
-    for name in AllMaterials:
-        if name not in UniqueMaterials:
-            UniqueMaterials.append(name)
-
-    OutputString += f"\nModel has {len(UniqueMaterials)} unique materials."
-
-    #Create a map of the unique materials and their indices. Create a phong material per unique mat 
-    MaterialMap = {}
-    for MatName in UniqueMaterials:
-        mat = fbx.FbxSurfacePhong.Create(SceneManager, MatName)
-        WorkingNode.AddMaterial(mat)
-        MaterialMap[MatName] = len(MaterialMap)
-
-    # ============================= #
-    # Create Triangles              #
-    # ============================= #
-
-    OutputString += f"\nAttempting to create {len(SourceFile.display_buffer.indices)} Triangles"
-
-    #Go through every triangle in the source file and create a polygon for it.
-    for i, tri in enumerate(SourceFile.display_buffer.indices):
-        WorkingMesh.BeginPolygon()
+        self.OurScene = fbx.FbxScene.Create(self.SceneManager, self.PathToFile.stem)
         
-        #Every vertex in the created triangle
-        for j in tri:
-            vert = SourceFile.display_buffer.vertices[j]
-            u = vert.u / 255.0
-            v = vert.v / 255.0
-           
-            #Create a unique UV location per vertex. Prevents seam errors
-            key = (j, (u, v))
-            if key in UnwrapMap:
-                uv_index = UnwrapMap[key]
-            else:
-                uv_vector = fbx.FbxVector2(u, 1 - v)
-                uv_index = UnwrapArrayDirect.GetCount()
-                UnwrapArrayDirect.Add(uv_vector)
-                UnwrapMap[key] = uv_index
+        #Validate our Scene so we don't work with malformed data.
+        if self.OurScene:
+            self.OutputString += "\nSuccessfully created FBX Scene"
+        else:
+            self.OutputString += "\nFailed to create FBX scene."
+            return None
+        
+        #Get our scene root, create our mesh and to the root
+        self.SceneRoot = self.OurScene.GetRootNode()
+        self.MeshNode = fbx.FbxNode.Create(self.SceneManager, self.PathToFile.stem)
+        self.WorkingMesh = fbx.FbxMesh.Create(self.SceneManager, "Mesh")
 
-            #Map the triangle to the correct UV index
-            WorkingMesh.AddPolygon(j)
-            UnwrapArrayIndexed.Add(uv_index)
-        WorkingMesh.EndPolygon()
+        #Validate that our mesh was created
+        if self.WorkingMesh and self.MeshNode:
+            self.MeshNode.SetNodeAttribute(self.WorkingMesh)
+            self.SceneRoot.AddChild(self.MeshNode)
+            self.OutputString += "\nMesh Created succesfully"
+        else:
+            self.OutputString += "\nFailed to create mesh or mesh node."
+            return None
+        
 
-    # ============================= #
-    # Assign Materials              #
-    # ============================= #
-    
-    OutputString += "\nTriangles Created, assigning materials."
+    def CreateVertices(self):
+        """
+        Create Vertices Function
+        Intialize the mesh's vertices, set their positions, and then apply their normals
+        The big gotcha with this is that vertex normals are bytes, so we need to normalize them
+        """
 
-    #Create a new layer for our materials and make it so we can have a multi-material
-    MaterialLayer = WorkingMesh.CreateElementMaterial()
-    MaterialLayer.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByPolygon)
-    MaterialLayer.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eIndexToDirect)
+        #Initialize Vertex Array
+        VertexCount = len(self.SourceFile.display_buffer.vertices)
+        self.WorkingMesh.InitControlPoints(VertexCount)
 
-    #Actually assign the materials to each triangle
-    for MatName in AllMaterials:
-        MatIndex = MaterialMap.get(MatName, 0)
-        MaterialLayer.GetIndexArray().Add(MatIndex)
+        #Apply positions to each vertex. FBX requires this to be a Vector4 for some reason
+        for i, vert in enumerate(self.SourceFile.display_buffer.vertices):
+            self.WorkingMesh.SetControlPointAt(fbx.FbxVector4(vert.x, vert.y, vert.z), i)
 
-    OutputString += "\nMaterials assigned successfully."
+        #Report back that the vertices have been created, in the event of a failure past this
+        self.OutputString += "\nCreated Vertices. Processing Vertex Normals."
 
-"""
-# ================================================================================================================
-# Link Textures to Materials Function
-# TODO: This section is incomplete and unused. Cannot figure out why it doesn't work.
-# TODO: This is directly ported from the old Converter. Clean it up to be less vibe-coded
-# ================================================================================================================
-def LinkTexturesToMaterials():
-    print("Linking textures to materials...")
+        #Create a Layer for the mesh so we can begin to apply the normals
+        self.MeshLayer = self.WorkingMesh.GetLayer(0)
+        if not self.MeshLayer:
+            self.WorkingMesh.CreateLayer()
+            self.MeshLayer = self.WorkingMesh.GetLayer(0)
 
-    texture_types = {
-        '_D': fbx.FbxSurfaceMaterial.sDiffuse,
-        '_E': fbx.FbxSurfaceMaterial.sEmissive,
-        '_S': fbx.FbxSurfaceMaterial.sSpecular,
-        '_N': fbx.FbxSurfaceMaterial.sNormalMap,
-    }
+        #Create Element Normals they don't already exist on this layer
+        VertexNormals = self.MeshLayer.GetNormals()
+        if not VertexNormals:
+            VertexNormals = self.WorkingMesh.CreateElementNormal()
 
-    textures_dir = srm_path.parent.parent / "Textures"
+        VertexNormals.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByControlPoint) #One Normal Per Vert
+        VertexNormals.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eDirect) #Ordered Data
 
-    for mat_name in used_material_names:
-        mat = None
-        for i in range(SceneNode.GetMaterialCount()):
-            m = SceneNode.GetMaterial(i)
-            if m.GetName() == mat_name:
-                mat = m
-                break
-        if mat is None:
-            continue
+        #Normalize our Vertex Normals and apply them
+        for vert in self.SourceFile.display_buffer.vertices:
+            normal = fbx.FbxVector4(vert.normal_x, vert.normal_y, vert.normal_z)
+            normal.Normalize()
+            VertexNormals.GetDirectArray().Add(normal)
 
-        for suffix, fbx_prop in texture_types.items():
-            tex_filename = f"{mat_name}{suffix}.dds"
-            tex_path = textures_dir / tex_filename
-            if tex_path.exists():
-                fbx_tex = fbx.FbxFileTexture.Create(SceneManager, tex_path.stem)
-                fbx_tex.SetFileName(str(tex_path))
-                fbx_tex.SetSwapUV(False)
-                fbx_tex.SetTranslation(0.0, 0.0)
-                fbx_tex.SetScale(1.0, 1.0)
-                fbx_tex.SetRotation(0.0, 0.0)
-                prop = mat.FindProperty(fbx_prop)
-                if prop.IsValid():
-                    prop.ConnectSrcObject(fbx_tex)
-"""
+        OutputString += "\nNormal Data applied to Vertices"
 
 
-def CreateSkeleton(SourceFile: SrmFile, WorkingRoot: fbx.FbxScene) -> dict[int, fbx.FbxNode]:
-    """
-    Create Skeleton Function
-    Create a Root skeleton node and then only add bones that actually have skinning data.
-    Currently parents everything to the root. SRM files don't seem to store the heirarchy information at all.
-    TODO: Read Zata's YAML file system to build the heirarchy.
-    """
-    global SceneManager, OutputString
-
-    OutputString += "\nCreating Skeleton"
-    
-    #Create the root skeleton node and assign its attributes
-    SkeletonType = getattr(fbx.FbxSkeleton.EType, 'eLimbNode', fbx.FbxSkeleton.EType.eRoot)
-    SkeletonRoot = fbx.FbxNode.Create(SceneManager, "RootSkeleton")
-    RootType = fbx.FbxSkeleton.Create(SceneManager, "SkeletonRoot")
-    RootType.SetSkeletonType(SkeletonType)
-    SkeletonRoot.SetNodeAttribute(RootType)
-    WorkingRoot.AddChild(SkeletonRoot)
-
-    #Create a Map of the bones to their indices.
-    NodeMap = {}
-    SkippedBones = 0
-
-    #Loop through every bone in the srm file
-    for i, (active, BonePos) in enumerate(zip(SourceFile.bones.active_bones, SourceFile.bones.bone_list)):
-        if not active:
-            SkippedBones += 1 #Increment skip counter for correct indexing offset
-            continue
-
-        #Set the bone name based on its index from the list
-        BonePos = SourceFile.bones.bone_list[i]
-        BoneName = f"Bone_{i:03}"
-
-        #Create the node and set its attributes
-        BoneNode = fbx.FbxNode.Create(SceneManager, BoneName)
-        MainSkel = fbx.FbxSkeleton.Create(SceneManager, BoneName)
-        MainSkel.SetSkeletonType(fbx.FbxSkeleton.EType.eLimbNode)
-        BoneNode.SetNodeAttribute(MainSkel)
-
-        #Convert Coordinate Space. FBX = Y-Up/Right-Handed. SRM = Z-Up/Left-Handed.
-        x, y, z = BonePos
-        fbx_pos = fbx.FbxDouble3(-x, -z, -y)
-        BoneNode.LclTranslation.Set(fbx_pos)
-
-        #Make the bone a child of the root bone and index it for skinning later
-        SkeletonRoot.AddChild(BoneNode)
-        NodeMap[i-SkippedBones] = BoneNode
-    
-    OutputString += f"\nSkeleton successfully created with {SkippedBones} null bones skipped"
-    return NodeMap
+    def ProcessMaterials(self, texture_format):
+        texture_converter = TextureConverter(fmt=texture_format)
+        for Material in self.SourceFile.material_palette.materials:
+            mat = fbx.FbxSurfacePhong.Create(self.SceneManager, Material.name)
+            for texture in Material.get_texture_suffixes():
+                try:
+                    converted_tex = f"Output/Textures/{texture.upper()}.{texture_converter.format.upper()}"
+                    texture_converter.convertTexture(
+                        f"Input/Textures/{texture.upper()}.DDS", 
+                        converted_tex
+                    )
+                    fbx_tex = fbx.FbxFileTexture.Create(self.SceneManager, texture)
+                    fbx_tex.SetFileName(str(converted_tex))
+                    if "_D" in texture:
+                        mat.Diffuse.ConnectSrcObject(fbx_tex)
+                    if "_S" in texture:
+                        mat.Specular.ConnectSrcObject(fbx_tex)
+                    if "_E" in texture:
+                        mat.Emissive.ConnectSrcObject(fbx_tex)
+                    if "_N" in texture:
+                        mat.NormalMap.ConnectSrcObject(fbx_tex)
+                except Exception as e:
+                    print(f"failed to parse texture {texture} - Reason {e}")
+            self.WorkingNode.AddMaterial(mat)
 
 
-def SkinMesh(SourceFile: SrmFile, WorkingScene: fbx.FbxScene, WorkingMesh: fbx.FbxMesh, WorkingNode: fbx.FbxNode, NodeMap: dict[int, fbx.FbxNode]):
-    """
-    Skin Mesh Function
-    Take the mesh and apply weights based on information from SRM file. Add the bind pose once mesh is skinned.
-    For skinned meshes, weight information is actually handled in the vertex color attributes. Must have been an efficiency measure from Crystal Dynamics that Aspyr used
-    This information is more readily present once you look at the shader. Level Geometry uses a different shader and uses the information for other purposes
-    """
-    global SceneManager, OutputString
+    def ProcessTriangleInfo(self):
+        """
+        Process Triangle Information Function
+        Apply Unwrap Data, Consolidate Materials, Create Triangles, and Assigns Materials to the triangles
+        This would have otherwise been four functions but they share so much data that its not worth it.
+        Luckily, we can be smart about how we write things out
+        """
 
-    OutputString += "\nBeginning skinning process. Adding Skin Clusters"
-    
-    #Create the Skin Deformer. It's not actually a layer but it follows our earlier naming convention.
-    SkinLayer = fbx.FbxSkin.Create(SceneManager, "Skin")
-    WorkingMesh.AddDeformer(SkinLayer)
+        # ============================= #
+        # Create UV Data                #
+        # ============================= #
 
-    #Make a cluster for each bone
-    SkinClusterMap = {}
-    for BoneIndex, BoneNode in NodeMap.items():
-        Cluster = fbx.FbxCluster.Create(SceneManager, f"Cluster_{BoneIndex}")
-        Cluster.SetLink(BoneNode)
-        SkinClusterMap[BoneIndex] = Cluster
+        self.OutputString += "\nBeginning UV Processing"
 
-    #Assign Vertices to each bone cluster
-    for vert_index, vert in enumerate(SourceFile.display_buffer.vertices):
-        #Bone Influence Index dictated by light attribute. Weights by color components
-        bone_ids = [vert.light_0, vert.light_1, vert.light_2]
-        weights = [vert.r / 255.0, vert.g / 255.0, vert.b / 255.0] #Normalize weights 
+        #Create a new layer for UVs
+        UnwrapLayer = self.WorkingLayer.GetUVs()
+        if not UnwrapLayer:
+            UnwrapLayer = self.WorkingMesh.CreateElementUV("UVSet")
 
-        #Apply weight to vertex (assuming non-zero)
-        for BoneIndex, weight in zip(bone_ids, weights):
-            if weight > 0 and BoneIndex in SkinClusterMap:
-                SkinClusterMap[BoneIndex].AddControlPointIndex(vert_index, weight)
+        #One UV Coordinate per vertex
+        UnwrapLayer.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByPolygonVertex) 
+        # Store UVs in a direct array, vertices can access the direct array through an Index array 
+        UnwrapLayer.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eIndexToDirect) 
 
-    OutputString += "\nSkin Clusters added and weights assigned. Attaching weights to skin"
+        #Store the two arrays so we can access them later
+        UnwrapArrayDirect = UnwrapLayer.GetDirectArray()
+        UnwrapArrayIndexed = UnwrapLayer.GetIndexArray()
 
-    #Set the bind matrix and add each cluster to the skin
-    BindMatrix = WorkingNode.EvaluateGlobalTransform()
-    for BoneIndex, Cluster in SkinClusterMap.items():
-        BoneNode = NodeMap[BoneIndex]
-        Cluster.SetTransformMatrix(BindMatrix)
-        Cluster.SetTransformLinkMatrix(BoneNode.EvaluateGlobalTransform())
-        SkinLayer.AddCluster(Cluster)
+        UnwrapMap = {}
+        
+        self.ProcessMaterials(self.SourceFile, self.WorkingNode, "PNG")
 
-    # ============================= #
-    # Add Bind Pose                 #
-    # ============================= #
+        # ============================= #
+        # Create Triangles              #
+        # ============================= #
 
-    OutputString += "\nCreating Bind Pose for Mesh"
-    
-    #Create a new bind pose and add mesh to it
-    BindPose = fbx.FbxPose.Create(WorkingScene, "BindPose")
-    BindPose.SetIsBindPose(True)
-    BindPose.Add(WorkingNode, ConvertMatrixType(BindMatrix))
-    
-    #Add each bone and its transform to the bind pose
-    for BoneNode in NodeMap.values():
-        BindPose.Add(BoneNode, ConvertMatrixType(BoneNode.EvaluateGlobalTransform()))
-    
-    #Assign bind pose
-    WorkingScene.AddPose(BindPose)
+        self.OutputString += f"\nAttempting to create {len(self.SourceFile.display_buffer.indices)} Triangles"
 
-    OutputString += "\nBind Pose assigned, Skinning complete."
+        MaterialLayer = self.WorkingMesh.CreateElementMaterial()
+        MaterialLayer.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByPolygon)
+        MaterialLayer.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eIndexToDirect)
+
+        #Go through every triangle in the source file and create a polygon for it.
+        for i, tri in enumerate(self.SourceFile.display_buffer.indices):
+            self.WorkingMesh.BeginPolygon(self.SourceFile.display_buffer.vertices[tri[0]].texture_index - 1)
+            
+            #Every vertex in the created triangle
+            for j in tri:
+                vert = self.SourceFile.display_buffer.vertices[j]
+                u = vert.u / 255.0
+                v = vert.v / 255.0
+            
+                #Create a unique UV location per vertex. Prevents seam errors
+                key = (j, (u, v))
+                if key in UnwrapMap:
+                    uv_index = UnwrapMap[key]
+                else:
+                    uv_vector = fbx.FbxVector2(u, 1-v)
+                    uv_index = UnwrapArrayDirect.GetCount()
+                    UnwrapArrayDirect.Add(uv_vector)
+                    UnwrapMap[key] = uv_index
+
+                #Map the triangle to the correct UV index
+                self.WorkingMesh.AddPolygon(j)
+                UnwrapArrayIndexed.Add(uv_index)
+            self.WorkingMesh.EndPolygon()
 
 
-def SrmToFBX(ReaverFilePath: Path, FileManager: fbx.FbxManager, GiveOutput: bool) -> tuple[fbx.FbxScene | None, str]:
-    """
-    SRM To FBX Function
-    Main function to actually convert files
-    We need a path to the file and the FBX Scene Manager to process the data
-    Returns an FBX Scene on success, null on failure
-    Optionally returns the Output String
-    """
-    global SceneManager, OutputString 
-    SceneManager = FileManager
-    OutputString = "Beginning Conversion of SRM File"
+    def CreateSkeleton(self):
+        """
+        Create Skeleton Function
+        Create a Root skeleton node and then only add bones that actually have skinning data.
+        Currently parents everything to the root. SRM files don't seem to store the heirarchy information at all.
+        TODO: Read Zata's YAML file system to build the heirarchy.
+        """
 
-    #Get our File and put it into a Variable
-    OurFile = ParseSRM(ReaverFilePath)
-    if OurFile is None:
-        return None, OutputString
-    
-    #Initialize the FBX Scene and retrieve the Scene Root and Mesh 
-    TheScene = InitializeScene(ReaverFilePath)
-    if TheScene is not None:
-        OurScene, OurSceneRoot, SceneNode, SceneMesh = TheScene
-    else:
-        return None, OutputString
-    
-    #Create Vertices on the Mesh
-    OurMeshLayer = CreateVertices(OurFile,SceneMesh)
+        self.OutputString += "\nCreating Skeleton"
+        
+        #Create the root skeleton node and assign its attributes
+        SkeletonType = getattr(fbx.FbxSkeleton.EType, 'eLimbNode', fbx.FbxSkeleton.EType.eRoot)
+        SkeletonRoot = fbx.FbxNode.Create(self.SceneManager, "RootSkeleton")
+        RootType = fbx.FbxSkeleton.Create(self.SceneManager, "SkeletonRoot")
+        RootType.SetSkeletonType(SkeletonType)
+        SkeletonRoot.SetNodeAttribute(RootType)
+        self.WorkingRoot.AddChild(SkeletonRoot)
 
-    #Create triangles, add their UVs and materials
-    ProcessTriangleInfo(OurFile,SceneMesh,SceneNode,OurMeshLayer)
+        #Create a Map of the bones to their indices.
+        SkippedBones = 0
 
-    #Create the Skeleton
-    BoneNodeMap = CreateSkeleton(OurFile,OurSceneRoot)
-    if not BoneNodeMap:
-        OutputString += "\nCouldn't find any bones"
-        return None, OutputString
+        #Loop through every bone in the srm file
+        for i, (active, BonePos) in enumerate(zip(self.SourceFile.bones.active_bones, self.SourceFile.bones.bone_list)):
+            if not active:
+                SkippedBones += 1 #Increment skip counter for correct indexing offset
+                continue
 
-    #Skin the mesh and add its bind pose
-    SkinMesh(OurFile,OurScene,SceneMesh,SceneNode,BoneNodeMap)
+            #Set the bone name based on its index from the list
+            BonePos = self.SourceFile.bones.bone_list[i]
+            BoneName = f"Bone_{i:03}"
 
-    #We have our new FBX File!
-    if GiveOutput:
-        return OurScene, OutputString
-    else:
-        return OurScene, None
+            #Create the node and set its attributes
+            BoneNode = fbx.FbxNode.Create(self.SceneManager, BoneName)
+            MainSkel = fbx.FbxSkeleton.Create(self.SceneManager, BoneName)
+            MainSkel.SetSkeletonType(fbx.FbxSkeleton.EType.eLimbNode)
+            BoneNode.SetNodeAttribute(MainSkel)
+
+            #Convert Coordinate Space. FBX = Y-Up/Right-Handed. SRM = Z-Up/Left-Handed.
+            x, y, z = BonePos
+            fbx_pos = fbx.FbxDouble3(-x, -z, -y)
+            BoneNode.LclTranslation.Set(fbx_pos)
+
+            #Make the bone a child of the root bone and index it for skinning later
+            SkeletonRoot.AddChild(BoneNode)
+            self.NodeMap[i-SkippedBones] = BoneNode
+        
+        self.OutputString += f"\nSkeleton successfully created with {SkippedBones} null bones skipped"
+
+
+    def SkinMesh(self):
+        """
+        Skin Mesh Function
+        Take the mesh and apply weights based on information from SRM file. Add the bind pose once mesh is skinned.
+        For skinned meshes, weight information is actually handled in the vertex color attributes. Must have been an efficiency measure from Crystal Dynamics that Aspyr used
+        This information is more readily present once you look at the shader. Level Geometry uses a different shader and uses the information for other purposes
+        """
+
+        self.OutputString += "\nBeginning skinning process. Adding Skin Clusters"
+        
+        #Create the Skin Deformer. It's not actually a layer but it follows our earlier naming convention.
+        SkinLayer = fbx.FbxSkin.Create(self.SceneManager, "Skin")
+        self.WorkingMesh.AddDeformer(SkinLayer)
+
+        #Make a cluster for each bone
+        SkinClusterMap = {}
+        for BoneIndex, BoneNode in self.NodeMap.items():
+            Cluster = fbx.FbxCluster.Create(self.SceneManager, f"Cluster_{BoneIndex}")
+            Cluster.SetLink(BoneNode)
+            SkinClusterMap[BoneIndex] = Cluster
+
+        #Assign Vertices to each bone cluster
+        for vert_index, vert in enumerate(self.SourceFile.display_buffer.vertices):
+            #Bone Influence Index dictated by light attribute. Weights by color components
+            bone_ids = [vert.light_0, vert.light_1, vert.light_2]
+            weights = [vert.r / 255.0, vert.g / 255.0, vert.b / 255.0] #Normalize weights 
+
+            #Apply weight to vertex (assuming non-zero)
+            for BoneIndex, weight in zip(bone_ids, weights):
+                if weight > 0 and BoneIndex in SkinClusterMap:
+                    SkinClusterMap[BoneIndex].AddControlPointIndex(vert_index, weight)
+
+        OutputString += "\nSkin Clusters added and weights assigned. Attaching weights to skin"
+
+        #Set the bind matrix and add each cluster to the skin
+        BindMatrix = self.WorkingNode.EvaluateGlobalTransform()
+        for BoneIndex, Cluster in SkinClusterMap.items():
+            BoneNode = self.NodeMap[BoneIndex]
+            Cluster.SetTransformMatrix(BindMatrix)
+            Cluster.SetTransformLinkMatrix(BoneNode.EvaluateGlobalTransform())
+            SkinLayer.AddCluster(Cluster)
+
+        # ============================= #
+        # Add Bind Pose                 #
+        # ============================= #
+
+        OutputString += "\nCreating Bind Pose for Mesh"
+        
+        #Create a new bind pose and add mesh to it
+        BindPose = fbx.FbxPose.Create(self.WorkingScene, "BindPose")
+        BindPose.SetIsBindPose(True)
+        BindPose.Add(self.WorkingNode, self.ConvertMatrixType(BindMatrix))
+        
+        #Add each bone and its transform to the bind pose
+        for BoneNode in self.NodeMap.values():
+            BindPose.Add(BoneNode, self.ConvertMatrixType(BoneNode.EvaluateGlobalTransform()))
+        
+        #Assign bind pose
+        self.WorkingScene.AddPose(BindPose)
+
+        OutputString += "\nBind Pose assigned, Skinning complete."
+
+
+    def SrmToFBX(self, ReaverFilePath: Path, FileManager: fbx.FbxManager, GiveOutput: bool) -> tuple[fbx.FbxScene | None, str]:
+        """
+        SRM To FBX Function
+        Main function to actually convert files
+        We need a path to the file and the FBX Scene Manager to process the data
+        Returns an FBX Scene on success, null on failure
+        Optionally returns the Output String
+        """
+
+        self.SceneManager = FileManager
+        self.OutputString = "Beginning Conversion of SRM File"
+        self.PathToFile = ReaverFilePath
+
+        #Get our File and put it into a Variable
+        self.ParseSRM()
+        if self.OurFile is None:
+            return None, self.OutputString
+        
+        #Initialize the FBX Scene and retrieve the Scene Root and Mesh 
+        self.InitializeScene()
+        if self.TheScene is None:
+            return None, self.OutputString
+        
+        #Create Vertices on the Mesh
+        self.CreateVertices()
+
+        #Create triangles, add their UVs and materials
+        self.ProcessTriangleInfo()
+
+        #Create the Skeleton
+        self.CreateSkeleton()
+        if not self.NodeMap:
+            self.OutputString += "\nCouldn't find any bones"
+            return None, self.OutputString
+
+        #Skin the mesh and add its bind pose
+        self.SkinMesh()
+
+        #We have our new FBX File!
+        if GiveOutput:
+            return self.OurScene, self.OutputString
+        else:
+            return self.OurScene, None
