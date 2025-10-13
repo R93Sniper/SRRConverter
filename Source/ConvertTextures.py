@@ -11,8 +11,7 @@ from PIL import Image, UnidentifiedImageError
 import logging
 
 class TextureConverter:
-    def __init__(self, fmt="PNG", logger=None):
-        self.format = fmt
+    def __init__(self, logger=None):
         if logger:
             self.logger = logger
         else:
@@ -22,7 +21,7 @@ class TextureConverter:
             handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
             self.logger.addHandler(handler)
     
-    def convertTexture(self, texture_in_path, texture_out_path) -> bool:
+    def convertTexture(self, texture_in_path, texture_out_path, format="PNG") -> bool:
         """
         # Valid formats
         (Some excluded due to needing additional parameters/being ill suited for this purpose)
@@ -53,7 +52,7 @@ class TextureConverter:
         """
         try:
             with Image.open(texture_in_path) as image:
-                image.save(texture_out_path, format=self.format)
+                image.save(texture_out_path, format)
             return True
         except FileNotFoundError:       # Bad path
             self.logger.error(f"Failed to locate file: {texture_in_path}")

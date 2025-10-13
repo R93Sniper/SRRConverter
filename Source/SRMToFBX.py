@@ -31,9 +31,10 @@ class FbxConverter:
         self.MeshNode: fbx.FbxNode = None               #
         self.MeshLayer: fbx.FbxLayer = None             # The layers of the mesh. Needed for different elements (ie vertex normals)
         self.WorkingMesh: fbx.FbxMesh = None            # The actual mesh we're creating and working on
-        self.NodeMap: dict[int, fbx.FbxNode] = None     # Mapping the Index of the bones to their FBX node. Required for skinning 
+        self.NodeMap: dict[int, fbx.FbxNode] = {}       # Mapping the Index of the bones to their FBX node. Required for skinning 
 
 
+    @staticmethod
     def ConvertMatrixType(MatrixToConvert: fbx.FbxAMatrix) -> fbx.FbxMatrix:
         """
         Convert Matrix Type Function
@@ -53,7 +54,7 @@ class FbxConverter:
         Given a file path, look for a SRM file there.
         If we can parse a SRM file, return it. Else return null. 
         """
-        OutputString += "\nParsing SRM File"
+        self.OutputString += "\nParsing SRM File"
         try:
             self.SourceFile = SrmFile.from_file(self.PathToFile)
             self.OutputString += "\nSRM file successfully parsed."
@@ -79,14 +80,14 @@ class FbxConverter:
             return None
         
         #Get our scene root, create our mesh and to the root
-        self.SceneRoot = self.OurScene.GetRootNode()
+        self.RootNode = self.OurScene.GetRootNode()
         self.MeshNode = fbx.FbxNode.Create(self.SceneManager, self.PathToFile.stem)
         self.WorkingMesh = fbx.FbxMesh.Create(self.SceneManager, "Mesh")
 
         #Validate that our mesh was created
         if self.WorkingMesh and self.MeshNode:
             self.MeshNode.SetNodeAttribute(self.WorkingMesh)
-            self.SceneRoot.AddChild(self.MeshNode)
+            self.RootNode.AddChild(self.MeshNode)
             self.OutputString += "\nMesh Created succesfully"
         else:
             self.OutputString += "\nFailed to create mesh or mesh node."
@@ -131,11 +132,11 @@ class FbxConverter:
             normal.Normalize()
             VertexNormals.GetDirectArray().Add(normal)
 
-        OutputString += "\nNormal Data applied to Vertices"
+        self.OutputString += "\nNormal Data applied to Vertices"
 
 
     def ProcessMaterials(self, texture_format):
-        texture_converter = TextureConverter(fmt=texture_format)
+        texture_converter = TextureConverter()
         for Material in self.SourceFile.material_palette.materials:
             mat = fbx.FbxSurfacePhong.Create(self.SceneManager, Material.name)
             for texture in Material.get_texture_suffixes():
@@ -143,7 +144,7 @@ class FbxConverter:
                     converted_tex = f"Output/Textures/{texture.upper()}.{texture_converter.format.upper()}"
                     texture_converter.convertTexture(
                         f"Input/Textures/{texture.upper()}.DDS", 
-                        converted_tex
+                        converted_tex,texture_format
                     )
                     fbx_tex = fbx.FbxFileTexture.Create(self.SceneManager, texture)
                     fbx_tex.SetFileName(str(converted_tex))
@@ -157,7 +158,7 @@ class FbxConverter:
                         mat.NormalMap.ConnectSrcObject(fbx_tex)
                 except Exception as e:
                     print(f"failed to parse texture {texture} - Reason {e}")
-            self.WorkingNode.AddMaterial(mat)
+            self.MeshNode.AddMaterial(mat)
 
 
     def ProcessTriangleInfo(self):
@@ -175,7 +176,7 @@ class FbxConverter:
         self.OutputString += "\nBeginning UV Processing"
 
         #Create a new layer for UVs
-        UnwrapLayer = self.WorkingLayer.GetUVs()
+        UnwrapLayer = self.MeshLayer.GetUVs()
         if not UnwrapLayer:
             UnwrapLayer = self.WorkingMesh.CreateElementUV("UVSet")
 
@@ -190,7 +191,7 @@ class FbxConverter:
 
         UnwrapMap = {}
         
-        self.ProcessMaterials(self.SourceFile, self.WorkingNode, "PNG")
+        self.ProcessMaterials("PNG")
 
         # ============================= #
         # Create Triangles              #
@@ -244,7 +245,7 @@ class FbxConverter:
         RootType = fbx.FbxSkeleton.Create(self.SceneManager, "SkeletonRoot")
         RootType.SetSkeletonType(SkeletonType)
         SkeletonRoot.SetNodeAttribute(RootType)
-        self.WorkingRoot.AddChild(SkeletonRoot)
+        self.RootNode.AddChild(SkeletonRoot)
 
         #Create a Map of the bones to their indices.
         SkippedBones = 0
@@ -309,10 +310,10 @@ class FbxConverter:
                 if weight > 0 and BoneIndex in SkinClusterMap:
                     SkinClusterMap[BoneIndex].AddControlPointIndex(vert_index, weight)
 
-        OutputString += "\nSkin Clusters added and weights assigned. Attaching weights to skin"
+        self.OutputString += "\nSkin Clusters added and weights assigned. Attaching weights to skin"
 
         #Set the bind matrix and add each cluster to the skin
-        BindMatrix = self.WorkingNode.EvaluateGlobalTransform()
+        BindMatrix = self.MeshNode.EvaluateGlobalTransform()
         for BoneIndex, Cluster in SkinClusterMap.items():
             BoneNode = self.NodeMap[BoneIndex]
             Cluster.SetTransformMatrix(BindMatrix)
@@ -323,21 +324,21 @@ class FbxConverter:
         # Add Bind Pose                 #
         # ============================= #
 
-        OutputString += "\nCreating Bind Pose for Mesh"
+        self.OutputString += "\nCreating Bind Pose for Mesh"
         
         #Create a new bind pose and add mesh to it
-        BindPose = fbx.FbxPose.Create(self.WorkingScene, "BindPose")
+        BindPose = fbx.FbxPose.Create(self.OurScene, "BindPose")
         BindPose.SetIsBindPose(True)
-        BindPose.Add(self.WorkingNode, self.ConvertMatrixType(BindMatrix))
+        BindPose.Add(self.MeshNode, self.ConvertMatrixType(BindMatrix))
         
         #Add each bone and its transform to the bind pose
         for BoneNode in self.NodeMap.values():
             BindPose.Add(BoneNode, self.ConvertMatrixType(BoneNode.EvaluateGlobalTransform()))
         
         #Assign bind pose
-        self.WorkingScene.AddPose(BindPose)
+        self.OurScene.AddPose(BindPose)
 
-        OutputString += "\nBind Pose assigned, Skinning complete."
+        self.OutputString += "\nBind Pose assigned, Skinning complete."
 
 
     def SrmToFBX(self, ReaverFilePath: Path, FileManager: fbx.FbxManager, GiveOutput: bool) -> tuple[fbx.FbxScene | None, str]:
@@ -355,12 +356,12 @@ class FbxConverter:
 
         #Get our File and put it into a Variable
         self.ParseSRM()
-        if self.OurFile is None:
+        if self.SourceFile is None:
             return None, self.OutputString
         
         #Initialize the FBX Scene and retrieve the Scene Root and Mesh 
         self.InitializeScene()
-        if self.TheScene is None:
+        if self.OurScene is None:
             return None, self.OutputString
         
         #Create Vertices on the Mesh

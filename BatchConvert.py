@@ -12,7 +12,7 @@ Description: Batch Converter Class
 
 from pathlib import Path
 import fbx
-from Source.SRMToFBX import SrmToFBX
+from Source.SRMToFBX import FbxConverter
 from Source.Hry import buildDefinitions
 from Source.ConvertTextures import TextureConverter
 
@@ -100,7 +100,7 @@ class BatchConverter:
                 print("Invalid Selection, Pick one of the following by name or number:\n1) PNG\n2) TGA\n3) DDS\n4) TIFF")
 
         #Creating an instance of the ConvertTextures class so we get a logger
-        TextureLogger = ConvertTextures()
+        TextureLogger = TextureConverter()
 
         #Actually convert each of the textures 
         for i in TexturesInDirectory:
@@ -136,7 +136,8 @@ class BatchConverter:
         #Start Converting files
         for i in FilesInDirectory:
             print(f"\nAttempting to convert {i.name} to FBX")
-            OutputScene, LogString = SrmToFBX(i,OurFileManager,GenerateLog)
+            ModelConv = FbxConverter()
+            OutputScene, LogString = ModelConv.SrmToFBX(i,OurFileManager,GenerateLog)
             
             #Create output paths per item we're converting
             OutputFile = BatchConverter.OUTPUT_DIR / f"{i.stem}.fbx"
