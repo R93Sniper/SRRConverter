@@ -1,0 +1,14 @@
+v2.0.1:
+    - Initialized Defiance branch.
+    - Began migration and refactoring from v1. 
+    - Ported hashing function from EXE into python [CrstalDynamics/hash.py]
+    - Created lazy parser for BigFile
+    - Created CLI front end to hash a string [CLI/impls.py: hash_impl]
+    - Created CLI front end for version
+    - Created CLI front end for file extraction [CLI/impls.py]
+        - Extraction by filename [extract_file_impl]
+        - Extraction by hash [extract_file_impl]
+        - Extraction from manifest [extract_manifest_impl]
+            - Extraction from cross referenced manifest only [extract_w_manifest_cross_ref]
+            - Extraction from cross references manifest + unknown files [extract_all_w_manifest_cross_ref]
+    - Initialized usage information [readme.md]
