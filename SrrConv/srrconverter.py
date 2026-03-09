@@ -3,7 +3,7 @@ from . import __version__
 
 from SrrConv.CLI.impls import *
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='subcommand help', required=True)
     
