@@ -12,3 +12,20 @@ v2.0.1:
             - Extraction from cross referenced manifest only [extract_w_manifest_cross_ref]
             - Extraction from cross references manifest + unknown files [extract_all_w_manifest_cross_ref]
     - Initialized usage information [readme.md]
+
+v2.0.2:
+    - Implemented logging system
+        - Added logging messages to existing functions
+    - Migrated code from __main__ into a dedicated file allowing it to be ran as a module (folder) or script (file).
+    - Added `_determine_extension_from_bytes` to fingerprint filetypes with unknown name
+    - Simplified hashing function to not require -s argument (`SrrConv hash <string>` instead of `SrrConv hash -s <string>`)
+    - Cleaned up CLI help messages
+    - Added defaults configuration.
+        - Added verb for "defaults"
+            - List: will list current defaults
+            - Set: will update a default to a new value
+        - Writing to log file will use default `log_file` if no file was specified
+        - BigFile will use default `big_file` if no file was specified
+        - Default output will use `out_path`
+        - Hash will use default `hash_manifest` if no file was specified
+    
