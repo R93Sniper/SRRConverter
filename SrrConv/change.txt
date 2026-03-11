@@ -28,4 +28,18 @@ v2.0.2:
         - BigFile will use default `big_file` if no file was specified
         - Default output will use `out_path`
         - Hash will use default `hash_manifest` if no file was specified
-    
+
+v2.0.3:
+    - Begin migration of srm_to_fbx
+    - Added/renamed some defaults
+        - Removed big_file in favor of using relative game directory path
+        - added image format default
+        - added sr_directory default
+        - added def_directory default
+    - Fixed some missed f in format strings
+    - Implemented early stages of srm to fbx conversion
+    - Added texture conversion
+    - Renamed srm.py to srm_gen1.py to disambiguate
+    - Created the FbxObject
+    - Created srm_gen1_to_fbx function
+    - added arguments to CLI to call conversion functions.

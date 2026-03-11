@@ -2,15 +2,22 @@ from pathlib import Path
 from SrrConv.CrystalDynamics.bigfile import BigFile
 from SrrConv.CrystalDynamics.hash import hash_str
 from SrrConv import __version__
+from SrrConv.FBX.srm_gen1_to_fbx import srm_to_fbx
+from SrrConv.CrystalDynamics.common import IMAGE_FMTS
+
+from typing import get_args
 
 import logging
 import pickle
 
 DEFAULT_PROPERTIES = {
-    "big_file": "./bigfilehd.dat",
-    "hash_manifest": "./hash.manifest",
-    "log_file": "./output.log",
-    "out_path": "./"
+    "hash_manifest": Path("./hash.manifest"),
+    "log_file": Path("./output.log"),
+    "out_path": Path("./"),
+    "image_format": "dds",
+    "sr_directory": Path("C:/Program Files (x86)/Steam/steamapps/common/Soul Reaver I-II/"),
+    "def_directory": Path("C:/Program Files (x86)/Steam/steamapps/common/Legacy of Kain Defiance Remastered/"),
+    "log_level": "info"
 }
 
 def _determine_extension_from_bytes(data):
@@ -29,24 +36,33 @@ def get_default_property(property, logger):
         if logger: logger.debug("No defaults file exists...Creating defaults")
         generate_new_defaults()
 
-    if logger: logger.debug("Loading config defaults from path: ./config.defaults")
+    if logger: logger.debug(f"Loading {property} default from path: ./config.defaults")
     with open("./config.defaults", "rb") as file:
         properties = pickle.load(file)
         if property not in properties:
             if logger: logger.error("No property `{property}` found in defaults")
         return properties.get(property, None)
 
+def log_level_from_str(string: str):
+    match string:
+        case "debug": return logging.DEBUG
+        case "info": return logging.INFO
+        case "warning": return logging.WARNING
+        case "error": return logging.ERROR
+        case _: return None
+
 def init_log(args):
     """Initialize the logger using any arguments passed in the command"""
     logger = logging.getLogger("SrrConv")
-    log_level = logging.INFO
+    log_level = log_level_from_str(get_default_property("log_level", logger))
     write_log = args.write_log
 
-    match args.log_level:
-        case "debug": log_level   = logging.DEBUG
-        case "error": log_level   = logging.ERROR
-        case "warning": log_level = logging.WARN
-        case "none": return logger                  # Silent output
+    if args.log_level:
+        log_level = log_level_from_str(args.log_level)
+    
+    if log_level is None:
+        return logger
+    
     logger.setLevel(log_level)
 
     formatter = logging.Formatter("%(levelname)s: %(message)s")
@@ -91,8 +107,13 @@ def assign_default_impl(args):
     logger.debug(f"SRRConv {__version__} - {__name__}.assign_default_impl")
     logger.debug(f"{args}")
 
-    default = args.default
+    key = args.default
     value = args.value.replace("\\", "/")
+
+    if key == "image_format":
+        if value not in get_args(IMAGE_FMTS):
+            logger.error(f"Unsupported image format: {value}")
+            return
     
     defaults = Path("./config.defaults")
     if not defaults.exists():
@@ -104,11 +125,16 @@ def assign_default_impl(args):
     logger.debug("Loading config defaults from path: ./config.defaults")
     with open("./config.defaults", "rb") as filein:
         properties = pickle.load(filein)
-        if default in properties:
-            logger.info(f"Reassigning `{default}` to `{value}`")
-            properties[default] = value
+        
+        if key in properties:
+            logger.info(f"Reassigning `{key}` to `{value}`")
+
+            if isinstance(properties[key], Path):
+                properties[key] = Path(value)
+            else:
+                properties[key] = value
         else:
-            logger.error("Unable to find property: {default}")
+            logger.error(f"Unable to find property: {key}")
 
     logger.debug("Saving updated config defaults to path: ./config.defaults")
     with open("./config.defaults", "wb") as fileout:
@@ -160,7 +186,7 @@ def extract_file_impl(args):
     logger.debug(f"{args}")
 
     input = args.input
-    bigfile  = args.bigfile if args.bigfile else get_default_property("big_file", logger)
+    bigfile  = args.bigfile if args.bigfile else get_default_property("def_game_directory", logger) / "bigfilehd.dat"
     outpath  = Path(args.outpath) if args.outpath else Path(get_default_property("out_path", logger))
     no_paths = args.no_paths
     type = args.type
@@ -209,7 +235,7 @@ def extract_all_w_manifest_cross_ref(args):
     logger.debug(f"{args}")
 
     input    = args.input if args.input else get_default_property("hash_manifest", logger)
-    bigfile  = args.bigfile if args.bigfile else get_default_property("big_file", logger)
+    bigfile  = args.bigfile if args.bigfile else get_default_property("def_game_directory", logger) / "bigfilehd.dat"
     outpath  = Path(args.outpath) if args.outpath else Path(get_default_property("out_path", logger))
     no_paths = args.no_paths
 
@@ -250,7 +276,7 @@ def extract_w_manifest_cross_ref(args):
     logger.debug(f"{args}")
 
     input    = args.input
-    bigfile  = args.bigfile if args.bigfile else get_default_property("big_file", logger)
+    bigfile  = args.bigfile if args.bigfile else get_default_property("def_directory", logger) / "bigfilehd.dat"
     outpath  = Path(args.outpath) if args.outpath else get_default_property("out_path", logger)
     no_paths = args.no_paths
 
@@ -284,3 +310,29 @@ def extract_manifest_impl(args):
         return extract_all_w_manifest_cross_ref(args)
     else:
         return extract_w_manifest_cross_ref(args)
+
+def get_texture_dir(args, logger: logging.Logger):
+    texture_dir = args.texture_dir
+    if args.game_dir:
+        if args.texture_dir:
+            logger.warning("Attempted to pass a relative and absolute path at the same time. Using absolute")
+        match args.game_dir.lower():
+            case "sr1": texture_dir = Path(get_default_property("sr_directory", logger)) / "1/TEX"
+            case "sr2": texture_dir = Path(get_default_property("sr_directory", logger)) / "2/TEX"
+    return texture_dir
+
+def convert_file_impl(args):
+    logger = init_log(args)
+    logger.debug(f"SRRConv {__version__} - {__name__}.convert_file_impl")
+    logger.debug(f"{args}")
+
+    input    = args.input
+    outpath  = args.outpath if args.outpath else (get_default_property("out_path", logger) / Path(input).stem).with_suffix(".fbx")
+    image_format  = args.image_format if args.image_format else get_default_property("image_format", logger)
+    
+    texture_dir = get_texture_dir(args, logger)
+    
+    if texture_dir is None:
+        return # failure
+    
+    srm_to_fbx(input, outpath, image_format, texture_dir, logger)

@@ -17,8 +17,7 @@ def parse_args():
         "-l", 
         "--log-level", 
         help="set the logging level. (lower is more verbose) default: Info", 
-        choices=("none", "error", "warning", "info", "debug"), 
-        default="info"
+        choices=("none", "error", "warning", "info", "debug")
     )
     log_default = get_default_property("log_file", None)
     parser.add_argument("-w", "--write-log", metavar="<FILE>", action="store", nargs="?", help="write any log output to a file", const=log_default)
@@ -65,11 +64,25 @@ def parse_args():
         help="specify whether `input` is a hash or a string. default: string",
         default="string"
     )
-    extract_file.add_argument("input", help="Hash/String of the data  to extract from the bigfile")
+    extract_file.add_argument("input", help="Hash/String of the data to extract from the bigfile")
     extract_file.add_argument("-b", "--bigfile", help="path to the bigfile from which to extract. If unspecified `config.defaults` is used.")
     extract_file.add_argument("-n", "--no-paths", action="store_true", help="flattens the output directory, preventing subdirectory creation.")
-    extract_file.add_argument("-o", "--outpath", help="specify the output directory where the extracted file will be saved. default: ./", default="./")
+    extract_file.add_argument("-o", "--outpath", help="specify the output directory where the extracted file will be saved.")
     extract_file.set_defaults(func=extract_file_impl)
+ 
+    # Convert
+    convert = subparsers.add_parser("convert", help="convert a SRM file to FBX")
+    convert_subparser = convert.add_subparsers(help="Target Game", required=True)
+
+    gen1 = convert_subparser.add_parser("gen1", help="Convert a SRM file from SR1 or SR2")
+    gen1.add_argument("input", help="path to the SRM file to be converted.")
+    gen1.add_argument("-o", "--outpath", help="specify the output path where the FBX file will be saved.")
+    gen1.add_argument("-g", "--game-dir", choices=("SR1", "SR2"), help="Reference textures relative to a game directory. (must not be used with -t)")
+    gen1.add_argument("-t", "--texture-dir", help="Reference textures with an absolute directory. (must not be used with -g)")
+    gen1.add_argument("-i", "--image-format", help="Prefered texture export format.")
+    gen1.set_defaults(func=convert_file_impl)
+
+    # gen2 = convert_subparser.add_parser("gen2", help="Convert a SRM file from Defiance")
 
     args = parser.parse_args()
     if "func" in args.__dict__:

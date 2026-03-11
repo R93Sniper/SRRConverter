@@ -11,6 +11,8 @@ from struct import unpack
 from enum import IntFlag
 from pathlib import Path
 
+from SrrConv.FBX.fbx_object import FbxObject
+
 class HeaderMismatch(Exception):
     """Exception raised for SRM header mismatch."""
 
@@ -54,44 +56,53 @@ class TextureType(IntFlag):
         return TextureType(value)
 
 @dataclass
-class TextureEntry:
+class Texture:
     """ Represents an individual texture in the model. """
     name: str = ""
     type: TextureType = TextureType(0)
 
     @classmethod
-    def from_stream(cls, stream) -> "TextureEntry":
+    def from_stream(cls, stream) -> "Texture":
         """ Parse a texture entry from the texture palette """
         name: str = stream.read(31).decode("ascii").rstrip("\x00")
         type: TextureType = TextureType.try_from(stream)
 
         return cls(name, type)
     
-    def get_texture_suffixes(self) -> list[str]:
+    def get_texture_suffixes(self, extension: str = "") -> list[str | None]:
         """ Given the current texture type, create the suffixes that represent the expected filenames. """
-        suffixes = []
-        if TextureType.Diffuse in self.type:
-            suffixes.append(f"{self.name}_D")
-        if TextureType.Normal in self.type:
-            suffixes.append(f"{self.name}_N")
-        if TextureType.Specular in self.type:
-            suffixes.append(f"{self.name}_S")
-        if TextureType.Emissive in self.type:
-            suffixes.append(f"{self.name}_E")
-        return suffixes
+        return [
+            f"{self.name}_D{extension}" if TextureType.Diffuse in self.type else None,
+            f"{self.name}_N{extension}" if TextureType.Normal in self.type else None,
+            f"{self.name}_S{extension}" if TextureType.Specular in self.type else None,
+            f"{self.name}_E{extension}" if TextureType.Emissive in self.type else None
+        ]
+
+    def has_diffuse(self) -> bool:
+        return TextureType.Diffuse in self.type
+
+    def has_normal(self) -> bool:
+        return TextureType.Normal in self.type
+
+    def has_specular(self) -> bool:
+        return TextureType.Specular in self.type
+
+    def has_emissive(self) -> bool:
+        return TextureType.Emissive in self.type
+
 
 @dataclass
-class TexturePalette:
+class MaterialPalette:
     """ Holds all the textures used by the model """
-    materials: list[TextureEntry]
+    materials: list[Texture]
 
     @classmethod
-    def from_stream(cls, stream) -> "TexturePalette":
+    def from_stream(cls, stream) -> "MaterialPalette":
         """ Parse the texture palette from stream """
         count: int = int.from_bytes(stream.read(4), "little")
-        return cls([TextureEntry.from_stream(stream) for _ in range(count)])
+        return cls([Texture.from_stream(stream) for _ in range(count)])
     
-@dataclass
+@dataclass(unsafe_hash=True)
 class Vertex:
     """ Vertex data """
     x             : float = 0
@@ -138,6 +149,12 @@ class DisplayBuffer:
 
         return cls(vertices, indices)
     
+    def num_vertices(self):
+        return len(self.vertices)
+    
+    def num_indices(self):
+        return len(self.indices)
+    
 @dataclass
 class Bones:
     bone_list: list[tuple[float, float, float]]
@@ -162,17 +179,23 @@ class Bones:
 class SrmFile:
     """ Highest level structure, pulls all the parts together """
     header: Header
-    material_palette: TexturePalette
+    material_palette: MaterialPalette
     bones: Bones
     display_buffer: DisplayBuffer
 
     @classmethod
-    def from_file(cls, path: Path) -> "SrmFile":
+    def from_file(cls, path: str | Path) -> "SrmFile":
         """ Attempt to parse a srm file """        
         with open(path, "rb") as stream:
             header: Header = Header.from_stream(stream)
-            texture_palette: TexturePalette = TexturePalette.from_stream(stream)
+            texture_palette: MaterialPalette = MaterialPalette.from_stream(stream)
             bones: Bones = Bones.from_stream(stream)
             buffer: DisplayBuffer = DisplayBuffer.from_stream(stream)
 
         return cls(header, texture_palette, bones, buffer)
+    
+    def get_vertices(self) -> list[tuple[float, float, float]]:
+        return [(vert.x, vert.y, vert.z) for vert in self.display_buffer.vertices]
+    
+    def get_normals(self) -> list[tuple[float, float, float]]:
+        return [(vert.normal_x, vert.normal_y, vert.normal_z) for vert in self.display_buffer.vertices]
