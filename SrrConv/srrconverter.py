@@ -52,6 +52,7 @@ def parse_args():
     extract_manifest.add_argument("-b", "--bigfile", help="path to the bigfile from which to extract. If unspecified `config.defaults` is used.")
     extract_manifest.add_argument("-k", "--known-only", action="store_true", help="extract only files listed within the manifest file; ignore others.")
     extract_manifest.add_argument("-n", "--no-paths", action="store_true", help="flattens the output directory, preventing subdirectory creation.")
+    extract_manifest.add_argument("-a", "--allow-overwrite", help="allow files to be overwritten when extracting")
     extract_manifest.add_argument("-o", "--outpath", help="specify the output directory where the extracted file will be saved. default: ./")
     extract_manifest.set_defaults(func=extract_manifest_impl)
 
@@ -67,6 +68,7 @@ def parse_args():
     extract_file.add_argument("input", help="Hash/String of the data to extract from the bigfile")
     extract_file.add_argument("-b", "--bigfile", help="path to the bigfile from which to extract. If unspecified `config.defaults` is used.")
     extract_file.add_argument("-n", "--no-paths", action="store_true", help="flattens the output directory, preventing subdirectory creation.")
+    extract_file.add_argument("-a", "--allow-overwrite", help="allow files to be overwritten when extracting")
     extract_file.add_argument("-o", "--outpath", help="specify the output directory where the extracted file will be saved.")
     extract_file.set_defaults(func=extract_file_impl)
  
@@ -74,13 +76,25 @@ def parse_args():
     convert = subparsers.add_parser("convert", help="convert a SRM file to FBX")
     convert_subparser = convert.add_subparsers(help="Target Game", required=True)
 
-    gen1 = convert_subparser.add_parser("gen1", help="Convert a SRM file from SR1 or SR2")
-    gen1.add_argument("input", help="path to the SRM file to be converted.")
-    gen1.add_argument("-o", "--outpath", help="specify the output path where the FBX file will be saved.")
-    gen1.add_argument("-g", "--game-dir", choices=("SR1", "SR2"), help="Reference textures relative to a game directory. (must not be used with -t)")
-    gen1.add_argument("-t", "--texture-dir", help="Reference textures with an absolute directory. (must not be used with -g)")
-    gen1.add_argument("-i", "--image-format", help="Prefered texture export format.")
-    gen1.set_defaults(func=convert_file_impl)
+    srm = convert_subparser.add_parser("srm", help="Convert a SRM file")
+    srm.add_argument("input", help="path to the SRM file to be converted.")
+    srm.add_argument("-p", "--prevent-cleanup", action="store_true", help="clean up intermediary files used for conversion.", default=False)
+    srm.add_argument("-o", "--outpath", help="specify the output path where the FBX file will be saved.")
+    srm.add_argument("-a", "--allow-overwrite", action="store_true", help="allow files to be overwritten when extracting")
+    srm.add_argument("-g", "--game-dir", choices=("sr1", "sr2"), help="Reference textures relative to a game directory. (must not be used with -t)")
+    srm.add_argument("-t", "--texture-dir", help="Reference textures with an absolute directory. (must not be used with -g)")
+    srm.add_argument("-i", "--image-format", help="Prefered texture export format.")
+    srm.set_defaults(func=convert_file_impl)
+
+    bigfile = convert_subparser.add_parser("bigfile", help="Extract and convert SRM from bigfile")
+    bigfile.add_argument("input", help="path to the big file to be converted.")
+    bigfile.add_argument("name", help="name of the object to be extracted")
+    bigfile.add_argument("-o", "--outpath", help="specify the output path where the FBX file will be saved.")
+    bigfile.add_argument("-p", "--prevent-cleanup", action="store_true", help="clean up intermediary files used for conversion.", default=True)
+    bigfile.add_argument("-a", "--allow-overwrite", action="store_true", help="allow files to be overwritten when extracting")
+    bigfile.add_argument("-t", "--texture-dir", help="use a specified texture directory, instead of big file")
+    bigfile.add_argument("-i", "--image-format", help="Prefered texture export format.")
+    # srm.set_defaults(func=convert_from_bigfile)
 
     # gen2 = convert_subparser.add_parser("gen2", help="Convert a SRM file from Defiance")
 

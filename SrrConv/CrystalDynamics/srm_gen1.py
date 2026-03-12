@@ -11,8 +11,6 @@ from struct import unpack
 from enum import IntFlag
 from pathlib import Path
 
-from SrrConv.FBX.fbx_object import FbxObject
-
 class HeaderMismatch(Exception):
     """Exception raised for SRM header mismatch."""
 
@@ -35,7 +33,8 @@ class Header:
     @classmethod
     def from_stream(cls, stream) -> "Header":
         """ Parse the header from stream. """
-        (signature,) = unpack("<I48x", stream.read(52))
+        (signature, count) = unpack("<2I", stream.read(8))
+        stream.read(count * 44) # Burn extra data for now
         if signature != SRM_SIGNATURE:
             raise HeaderMismatch(signature)
         return cls(signature)
@@ -78,18 +77,6 @@ class Texture:
             f"{self.name}_E{extension}" if TextureType.Emissive in self.type else None
         ]
 
-    def has_diffuse(self) -> bool:
-        return TextureType.Diffuse in self.type
-
-    def has_normal(self) -> bool:
-        return TextureType.Normal in self.type
-
-    def has_specular(self) -> bool:
-        return TextureType.Specular in self.type
-
-    def has_emissive(self) -> bool:
-        return TextureType.Emissive in self.type
-
 
 @dataclass
 class MaterialPalette:
@@ -116,13 +103,13 @@ class Vertex:
     normal_y      : int   = 0   # Should prolly be normalized x/255
     normal_z      : int   = 0   # Should prolly be normalized x/255
     texture_index : int   = 0   # Weird it's on the vertex and not the face
-    light_0       : int   = 0
-    light_1       : int   = 0
-    light_2       : int   = 0
+    bone_target_1 : int   = 0
+    bone_target_2 : int   = 0
+    bone_target_3 : int   = 0
     u             : int   = 0   # Should prolly be normalized x/255
-    r             : int   = 0
-    g             : int   = 0
-    b             : int   = 0
+    bone_weight_1 : int   = 0
+    bone_weight_2 : int   = 0
+    bone_weight_3 : int   = 0
     v             : int   = 0   # Should prolly be normalized x/255
 
     @classmethod
@@ -195,7 +182,28 @@ class SrmFile:
         return cls(header, texture_palette, bones, buffer)
     
     def get_vertices(self) -> list[tuple[float, float, float]]:
-        return [(vert.x, vert.y, vert.z) for vert in self.display_buffer.vertices]
+        return [(vert.x, vert.y, -vert.z) for vert in self.display_buffer.vertices]
     
     def get_normals(self) -> list[tuple[float, float, float]]:
         return [(vert.normal_x, vert.normal_y, vert.normal_z) for vert in self.display_buffer.vertices]
+
+    def get_vertex_bone_ids(self) -> list[tuple[int, int, int]]:
+        return [
+            (
+                vert.bone_target_1, 
+                vert.bone_target_2, 
+                vert.bone_target_3
+            ) for vert in self.display_buffer.vertices
+        ]
+
+    def get_vertex_weights(self) -> list[tuple[float, float, float]]:
+        return [
+            (
+                vert.bone_weight_1 / 255.0, 
+                vert.bone_weight_2 / 255.0, 
+                vert.bone_weight_3 / 255.0
+            ) for vert in self.display_buffer.vertices
+        ]
+    
+    def get_bone_positions(self) -> list[tuple[float, float, float]]:
+        return self.bones.bone_list

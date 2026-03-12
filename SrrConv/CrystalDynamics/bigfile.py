@@ -2,6 +2,7 @@ from struct import unpack, pack
 from dataclasses import dataclass
 from SrrConv.CrystalDynamics.hash import hash_str
 
+from pathlib import Path
 
 @dataclass
 class FileTableEntry:
@@ -23,7 +24,7 @@ class BigFile:
         self.stream = None
 
     @classmethod
-    def from_file(cls, path: str) -> "BigFile":
+    def from_file(cls, path: str | Path) -> "BigFile":
         ret = cls()
         ret.stream = open(path,  "rb")
 

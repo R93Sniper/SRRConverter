@@ -43,3 +43,19 @@ v2.0.3:
     - Created the FbxObject
     - Created srm_gen1_to_fbx function
     - added arguments to CLI to call conversion functions.
+
+v2.0.4
+    - Fully integrated existing functionality from v1 Gen1 SRM
+    - Fully added beta support for Gen2 SRMs
+        - Created CLI front end
+        - Automatic detection of SRM Generation
+    - Migrated defaults to it's own file [default_properies.py]
+        - Changed defaults to reduce the name lengths and better describe their usage
+    - Added overwrite protection
+    - Updated some naming conventions to be more pythonic (and more may need to be done)
+    - Added automatic game path resolution
+    - Generalized srm_to_fbx to support Gen2 SRMs
+    - Started adding log information
+    - Minor tweak to bigfile.py allowing path to be passed as well as string
+    - Renamed common.py to image.py as it only had image related functions
+    - Added FbxObject and related functionality
