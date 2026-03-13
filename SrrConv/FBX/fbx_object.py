@@ -132,7 +132,7 @@ class FbxObject:
 
             skeleton_limb_node = fbx.FbxNode.Create(self.scene, f"bone_{index}")
             skeleton_limb_node.SetNodeAttribute(skeleton_limb_attribute)
-            skeleton_limb_node.LclTranslation.Set(fbx.FbxDouble3(position[0], -position[2], position[1]))
+            skeleton_limb_node.LclTranslation.Set(fbx.FbxDouble3(-position[0], -position[2], position[1]))
 
             cluster = fbx.FbxCluster.Create(self.scene, f"cluster_{index}")
             cluster.SetLink(skeleton_limb_node)
