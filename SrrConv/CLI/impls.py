@@ -91,14 +91,14 @@ def hash_impl(args):
 
 def _get_bigfile_data(big_path: str | Path, index_type: str, input: str, logger: logging.Logger) -> None | bytearray:
     """Retrieve data from a big file by hash or filename"""
-    logger.info("Loading BigFile: {bigfile}")
+    logger.info(f"Loading BigFile: {big_path}")
     bigfile = BigFile.from_file(big_path)
 
     if index_type == "hash":
-        logger.info("Attempting to get the data for entry with hash: {input}...")
+        logger.info(f"Attempting to get the data for entry with hash: {input}...")
         return bigfile.get_data_from_hash(int(input, 0x10))
     else:
-        logger.info("Attempting to get the data for entry with name: {input}...")
+        logger.info(f"Attempting to get the data for entry with name: {input}...")
         return bigfile.get_data_from_string(input)
 
 def _prep_output_directory(input: str, outpath: Path, no_paths: bool, logger: logging.Logger):
@@ -126,7 +126,7 @@ def extract_file_impl(args):
     logger.debug(f"SRRConv {__version__} - {__name__}.extract_file_impl")
     logger.debug(f"{args}")
 
-    input = args.input
+    input    = args.input
     allow_overwrite = args.allow_overwrite
     bigfile  = args.bigfile if args.bigfile else get_default_property("def_directory", logger) / "bigfilehd.dat"
     outpath  = Path(args.outpath) if args.outpath else Path(get_default_property("out_path", logger))
@@ -135,7 +135,7 @@ def extract_file_impl(args):
 
     final_path = _prep_output_directory(input, outpath, no_paths, logger)
     if final_path.exists() and not allow_overwrite:
-        logger.warning("Cannot extract file: {final_path} - File exists and overwriting is disabled.")
+        logger.warning(f"Cannot extract file: {final_path} - File exists and overwriting is disabled.")
         return
 
     data = _get_bigfile_data(bigfile, type, input, logger)
@@ -206,7 +206,7 @@ def extract_all_w_manifest_cross_ref(args):
         final_path = _prep_output_directory(name, outpath, no_paths, logger)
         
         if final_path.exists() and not allow_overwrite:
-            logger.warning("Cannot extract file: {final_path} - File exists and overwriting is disabled.")
+            logger.warning(f"Cannot extract file: {final_path} - File exists and overwriting is disabled.")
             continue
 
         logger.info(f"{final_path}")
@@ -224,16 +224,22 @@ def extract_w_manifest_cross_ref(args):
     logger.debug(f"SRRConv {__version__} - {__name__}.extract_w_manifest_cross_ref")
     logger.debug(f"{args}")
 
-    input    = args.input
+    input    = args.input if args.input else get_default_property("hash_manifest", logger)
     allow_overwrite = args.allow_overwrite
     bigfile  = args.bigfile if args.bigfile else get_default_property("def_directory", logger) / "bigfilehd.dat"
     outpath  = Path(args.outpath) if args.outpath else get_default_property("out_path", logger)
     no_paths = args.no_paths
 
+    logger.info(f"Loading BigFile: {bigfile}")
     bigfile  = BigFile.from_file(bigfile)
+    
     manifest_lines = open(input, "r").readlines()
     for line in manifest_lines:
         name = line.replace('\n', '').replace('\r', '')
+
+        data = bigfile.get_data_from_string(name)
+        if data is None:
+            continue
 
         if no_paths:
             final_path = outpath / Path(name).name
@@ -243,11 +249,7 @@ def extract_w_manifest_cross_ref(args):
             final_path.parent.mkdir(parents=True, exist_ok=True)
 
         if final_path.exists() and not allow_overwrite:
-            logger.warning("Cannot extract file: {final_path} - File exists and overwriting is disabled.")
-            continue
-
-        data = bigfile.get_data_from_string(name)
-        if data is None:
+            logger.warning(f"Cannot extract file: {final_path} - File exists and overwriting is disabled.")
             continue
 
         with open(final_path, "wb") as file_out:
@@ -339,17 +341,17 @@ def _convert_file_gen2(args, logger):
         srm_to_fbx_gen2(input, texture_path, outpath, image_format, allow_overwrite, prevent_cleanup, logger)
         return
 
-    data = _get_bigfile_data(texture_path, "string", args.input, logger)
+    # data = _get_bigfile_data(texture_path, "string", args.input, logger)
 
-    if data == None:
-        return # Error srm not found
+    # if data == None:
+    #     return # Error srm not found
     
-    # Extract SRM from bigfile
-    srm_path = (outpath / Path(raw_input).stem).with_suffix(".srm")
-    with open(srm_path, "wb") as file: 
-        file.write(data)
+    # # Extract SRM from bigfile
+    # srm_path = (outpath / Path(raw_input).stem).with_suffix(".srm")
+    # with open(srm_path, "wb") as file: 
+    #     file.write(data)
 
-    srm_to_fbx_gen2(srm_path, texture_path, (outpath / Path(input).stem).with_suffix(".fbx"), image_format, allow_overwrite, cleanup, logger)
+    # srm_to_fbx_gen2(srm_path, texture_path, (outpath / Path(input).stem).with_suffix(".fbx"), image_format, allow_overwrite, cleanup, logger)
 
 def convert_file_impl(args):
     logger = init_log(args)

@@ -31,7 +31,10 @@ class FbxObject:
             mesh_layer = mesh.GetLayer(0)
 
         logger.debug("Creating normal layer")
-        normals = fbx.FbxLayerElementNormal.Create(mesh, "normals")
+        normals = mesh_layer.GetNormals()
+        if not normals:
+            normals = mesh.CreateElementNormal()
+        
         normals.SetMappingMode(fbx.FbxLayerElement.EMappingMode.eByControlPoint)
         normals.SetReferenceMode(fbx.FbxLayerElement.EReferenceMode.eDirect)
 
@@ -50,9 +53,9 @@ class FbxObject:
                 ) -> fbx.FbxMesh | None:
         logger.info(f"Creating new mesh: {name}")
 
-        logger.debug(f"Creating mesh node: {name}_node")
-        mesh_node = fbx.FbxNode.Create(self.scene, f"{name}_node")
-        logger.debug(f"Creating mesh: {name}")
+        logger.debug(f"Creating mesh node: {name}_mesh")
+        mesh_node = fbx.FbxNode.Create(self.scene, f"{name}_mesh")
+        logger.debug(f"Creating fbx mesh: {name}")
         new_mesh = fbx.FbxMesh.Create(self.scene, name)
 
         if mesh_node and self.new_mesh:
@@ -112,13 +115,14 @@ class FbxObject:
             self,
             mesh: fbx.FbxMesh, 
             bone_positions: list[tuple[float, float, float]], 
+            name: str,
             logger: Logger
         ):
         skeleton_attribute = fbx.FbxSkeleton.Create(self.scene, "skeleton")
         skeleton_attribute.SetSkeletonType(fbx.FbxSkeleton.EType.eRoot)
         skeleton_attribute.LimbLength.Set(5.0)
 
-        skeleton_root = fbx.FbxNode.Create(self.scene, "skeleton_root")
+        skeleton_root = fbx.FbxNode.Create(self.scene, f"{name}_skel")
         skeleton_root.SetNodeAttribute(skeleton_attribute)
         skeleton_root.LclTranslation.Set(fbx.FbxDouble3(0, 0, 0))
 
@@ -169,12 +173,13 @@ class FbxObject:
     def rig( 
             self, 
             mesh: fbx.FbxMesh, 
+            name: str,
             bone_positions: list[tuple[float, float, float]], 
             vertex_bone_id: list[tuple[int, int, int]], 
             vertex_weights: list[tuple[float, float, float]],
             logger: Logger
         ):
-        clusters = self._create_bones(mesh, bone_positions, logger)
+        clusters = self._create_bones(mesh, bone_positions, name, logger)
         self._create_skin(mesh, clusters, vertex_bone_id, vertex_weights, logger)
         
     def export(self, path: str | Path, logger: Logger):

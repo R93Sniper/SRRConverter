@@ -89,7 +89,7 @@ def create_triangles(srm, mesh: fbx.FbxMesh, logger: Logger):
                 if isinstance(vert.u, float):
                     uv_vector = fbx.FbxVector2(vert.u, -vert.v)
                 uv_index = uv_data.GetCount()
-                uv_data.Add(uv_vector)
+                uv_data.Add(uv_vector) # type: ignore
                 seen_vertices[vert] = uv_index
 
             mesh.AddPolygon(index)
@@ -172,8 +172,13 @@ def srm_to_fbx_gen2(
     srm = Gen2.SrmFile.from_file(srm_path)
 
     for i, srm_entry in enumerate(srm.entries):
-        logger.debug(f"Creating Mesh: {srm_path.stem}_{i}")
-        mesh = fbx_object.new_mesh(f"{srm_path.stem}_{i}", logger, srm_entry.get_vertices(), srm_entry.get_normals())
+        if i == 0:
+            mesh_name = srm_path.stem
+        else:
+            mesh_name = f"{srm_path.stem}_lod_{i}"
+
+        logger.debug(f"Creating Mesh: {mesh_name}")
+        mesh = fbx_object.new_mesh(f"{mesh_name}", logger, srm_entry.get_vertices(), srm_entry.get_normals())
         if mesh == None:
             logger.error("Failed to create new mesh srm_entry to fbx!")
             return
@@ -182,7 +187,7 @@ def srm_to_fbx_gen2(
         create_triangles(srm_entry, mesh, logger)
         convert_textures_gen2(srm_entry, fbx_path, texture_path, fmt, allow_overwrite, prevent_cleanup, logger)
 
-        fbx_object.rig(mesh, srm_entry.get_bone_positions(), srm_entry.get_vertex_bone_ids(), srm_entry.get_vertex_weights(), logger)
+        fbx_object.rig(mesh, mesh_name, srm_entry.get_bone_positions(), srm_entry.get_vertex_bone_ids(), srm_entry.get_vertex_weights(), logger)
 
     fbx_object.export(fbx_path, logger)
 

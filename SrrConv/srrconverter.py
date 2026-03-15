@@ -68,7 +68,7 @@ def parse_args():
     extract_file.add_argument("input", help="Hash/String of the data to extract from the bigfile")
     extract_file.add_argument("-b", "--bigfile", help="path to the bigfile from which to extract. If unspecified `config.defaults` is used.")
     extract_file.add_argument("-n", "--no-paths", action="store_true", help="flattens the output directory, preventing subdirectory creation.")
-    extract_file.add_argument("-a", "--allow-overwrite", help="allow files to be overwritten when extracting")
+    extract_file.add_argument("-a", "--allow-overwrite", action="store_true", help="allow files to be overwritten when extracting")
     extract_file.add_argument("-o", "--outpath", help="specify the output directory where the extracted file will be saved.")
     extract_file.set_defaults(func=extract_file_impl)
  

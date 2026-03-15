@@ -85,7 +85,7 @@ SRM_SIGNATURE = 0x84d5253 #SRM\x08
 class Header:
     """ Header for the SRM file """
     signature: int = SRM_SIGNATURE
-    srm_count: int = 0
+    srm_lod: int = 0
 
     @classmethod
     def from_stream(cls, stream) -> "Header":
@@ -152,6 +152,6 @@ class SrmFile:
         """ Attempt to parse a srm file """        
         with open(path, "rb") as stream:
             header: Header = Header.from_stream(stream)
-            entries = [SrmEntry.from_stream(stream) for _ in range(header.srm_count)]
+            entries = [SrmEntry.from_stream(stream) for _ in range(header.srm_lod)]
 
         return cls(header, entries)
