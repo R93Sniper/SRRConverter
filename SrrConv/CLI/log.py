@@ -3,8 +3,7 @@ from .default_properties import get_default_property
 
 try:
     from colorama import init, Fore, Back, Style
-except:
-    # If colorama isn't installed, I'll just bypass color formatting
+except ImportError:
     init = None
     Fore = None
     Back = None
@@ -25,40 +24,38 @@ WARN_MSG = f"{RESET}{Fore.YELLOW}" if Fore else ""
 ERR_TITLE = f"{RESET}{Fore.BLACK}{Back.RED}" if Fore and Back else ""
 ERR_MSG = f"{RESET}{Fore.RED}" if Fore else ""
 
-class CustomFormatter(logging.Formatter):
-    def __init__(self, fmt=None, colorized = False):
-        if init: init()
 
+class CustomFormatter(logging.Formatter):
+    def __init__(self, fmt: str | None = None, colorized: bool = False):
+        if init:
+            init()
         super().__init__()
         self.fmt = fmt
         self.colorized = colorized
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         match record.levelno:
             case logging.DEBUG:
                 if self.colorized:
                     return f"{DEBUG_TITLE}Debug|{DEBUG_MSG} {record.msg} {DEBUG_TRACE}[{record.filename}:{record.lineno}]{RESET}"
-                else:
-                    return f"Debug| {record.msg} [{record.filename}:{record.lineno}]"
+                return f"Debug| {record.msg} [{record.filename}:{record.lineno}]"
             case logging.INFO:
                 if self.colorized:
                     return f"{INFO_TITLE}Info |{INFO_MSG} {record.msg}{RESET}"
-                else:
-                    return f"Info | {record.msg}"
+                return f"Info | {record.msg}"
             case logging.WARNING:
                 if self.colorized:
                     return f"{WARN_TITLE}Warn |{WARN_MSG} {record.msg}{RESET}"
-                else:
-                    return f"Warn | {record.msg}"
+                return f"Warn | {record.msg}"
             case logging.ERROR:
                 if self.colorized:
                     return f"{ERR_TITLE}Error|{ERR_MSG} {record.msg}{RESET}"
-                else:
-                    return f"Error| {record.msg}"
+                return f"Error| {record.msg}"
             case _:
                 return super().format(record)
-            
-def log_level_from_str(string: str):
+
+
+def log_level_from_str(string: str) -> int | None:
     match string:
         case "debug": return logging.DEBUG
         case "info": return logging.INFO
@@ -66,15 +63,16 @@ def log_level_from_str(string: str):
         case "error": return logging.ERROR
         case _: return None
 
-def init_log(args):
-    """Initialize the logger using any arguments passed in the command"""
-    logger = logging.getLogger("SrrConv")
-    log_level = log_level_from_str(get_default_property("log_level", logger))
-    write_log = args.write_log
 
+def init_log(args) -> logging.Logger:
+    """Initialize the logger using any arguments passed in the command."""
+    logger = logging.getLogger("SrrConv")
+    logger.handlers.clear()
+
+    log_level = log_level_from_str(get_default_property("log_level", logger))
     if args.log_level:
         log_level = log_level_from_str(args.log_level)
-    
+
     if log_level is None:
         return logger
 
@@ -84,8 +82,8 @@ def init_log(args):
     stream_handler.setFormatter(CustomFormatter("%(message)s", True))
     logger.addHandler(stream_handler)
 
-    if write_log != None:
-        file_handler = logging.FileHandler(write_log, mode="w")
+    if args.write_log is not None:
+        file_handler = logging.FileHandler(args.write_log, mode="w")
         file_handler.setFormatter(CustomFormatter("%(message)s"))
         logger.addHandler(file_handler)
 

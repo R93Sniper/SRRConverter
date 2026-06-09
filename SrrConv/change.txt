@@ -59,3 +59,42 @@ v2.0.4
     - Minor tweak to bigfile.py allowing path to be passed as well as string
     - Renamed common.py to image.py as it only had image related functions
     - Added FbxObject and related functionality
+
+v2.0.5:
+    - Added context manager support to BigFile (__enter__/__exit__/close)
+    - Added type hints throughout bigfile.py
+    - Replaced TODO stubs with proper exceptions (ValueError, KeyError)
+    - Fixed file handle leak in BigFile.from_file on parse failure
+    - Added sanity check on file entry count with _MAX_FILE_ENTRIES constant
+    - Fixed hash parameter shadowing built-in hash()
+    - Updated to_stream pack order to match from_stream/dataclass field order
+    - Changed bare except: to except Exception:
+    - Added module, class, and method docstrings
+    - Rewrote hash_str in pure Python (removed ctypes), 25 lines shorter
+    - Replaced sign-check idiom with direct bit test (crc & 0x80000000)
+    - Added hash_str_fast: table-driven CRC32 variant using cached lookup table
+    - Renamed XOR_VALUE to _POLY for clarity
+    - Added CRC table precomputation and disk caching (hash.crc_table)
+    - Migrated config storage from pickle (config.defaults) to yaml (config.yaml)
+    - Added automatic migration from old config.defaults on first access
+    - Added list_defaults() and set_default_property() public helpers
+    - Made FBX imports lazy so non-FBX commands work without the SDK
+    - Cleaned up image.py: module/function docstrings, removed duplicate tga
+    - Added -> bool return type hint to convert_image_data
+    - Removed redundant parent-dir guard before mkdir
+    - Added NORMAL_BIAS constant directly in srm_gen2.py to fix import
+    - Updated help text references from config.defaults to config.yaml
+    - Fixed __main__.py to allow running from SrrConv/ directory
+    - Fixed _CRC_TABLE_PATH type (str -> Path) in hash.py
+    - Cleaned up srm_gen1.py: BinaryIO hints, texture_type rename, MAX_BONES constant,
+      warnings.warn, -> int on num_* methods, get_texture_suffixes returns list[str],
+      get_normals explicit float(), index_count // 3 loop, docstrings
+    - Renamed num_indices to num_triangles in both gen1 and gen2
+    - Fixed SrmFile.from_file local var name (texture_palette -> material_palette)
+    - Fixed get_default_property to return Path for path-like values
+    - Cleaned up srm_gen2.py: moved SRM_SIGNATURE to module top, expanded abbreviated locals
+    - Cleaned up fbx_object.py: added __future__ annotations, removed redundant path.parent guard
+    - Cleaned up srm_to_fbx.py: added type hints, None guard on new_material, removed dead None checks
+    - Fixed impls.py: type/builtin shadowing, file handle leaks, return types, arg order in gen2 call
+    - Fixed srrconverter.py: missing action=store_true on --allow-overwrite, shadowed builtins, dead code
+    - Fixed log.py: bare except, duplicate handler accumulation, added type hints

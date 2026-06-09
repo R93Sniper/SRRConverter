@@ -2,7 +2,6 @@ from pathlib import Path
 from SrrConv.CrystalDynamics.bigfile import BigFile
 from SrrConv.CrystalDynamics.hash import hash_str
 from SrrConv import __version__
-from SrrConv.FBX.srm_to_fbx import srm_to_fbx_gen1, srm_to_fbx_gen2
 from SrrConv.CrystalDynamics.image import IMAGE_FMTS
 
 from .log import init_log
@@ -11,11 +10,10 @@ from .default_properties import *
 from typing import get_args
 
 import logging
-import pickle
 import tempfile
 
-def _determine_extension_from_bytes(data):
-    """Determine the filetype extension utilizing the file signature"""
+def _determine_extension_from_bytes(data: bytes) -> str:
+    """Determine the filetype extension from the file signature."""
     match data[:3]:
         case b'DDS':
             return ".dds"
@@ -24,26 +22,19 @@ def _determine_extension_from_bytes(data):
     return ".bin"
 
 def list_defaults_impl(args):
-    """Lists the current default parameters stored inside of config.defaults"""
+    """List the current default parameters stored in config.yaml."""
     logger = init_log(args)
     logger.debug(f"SRRConv {__version__} - {__name__}.list_defaults")
     logger.debug(f"{args}")
-    
-    defaults = Path("./config.defaults")
-    if not defaults.exists():
-        logger.debug("No defaults file exists...Creating defaults")
-        generate_new_defaults()
 
-    logger.debug("Loading config defaults from path: ./config.defaults")
-    with open("./config.defaults", "rb") as file:
-        logger.info("Current defaults:")
-        properties = pickle.load(file)
-        for (name, value) in properties.items():
-            logger.info(f"\t{name}: {value}")
-    
+    logger.debug("Loading config defaults...")
+    properties = list_defaults()
+    logger.info("Current defaults:")
+    for (name, value) in properties.items():
+        logger.info(f"\t{name}: {value}")
 
 def assign_default_impl(args):
-    """Change a default's value if the default exists"""
+    """Change a default's value if the default exists."""
     logger = init_log(args)
     logger.debug(f"SRRConv {__version__} - {__name__}.assign_default_impl")
     logger.debug(f"{args}")
@@ -55,41 +46,22 @@ def assign_default_impl(args):
         if value not in get_args(IMAGE_FMTS):
             logger.error(f"Unsupported image format: {value}")
             return
-    
-    defaults = Path("./config.defaults")
-    if not defaults.exists():
-        logger.debug("No defaults file exists...Creating defaults")
-        generate_new_defaults()
 
-    properties = {}
-
-    logger.debug("Loading config defaults from path: ./config.defaults")
-    with open("./config.defaults", "rb") as filein:
-        properties = pickle.load(filein)
-        
-        if key in properties:
-            logger.info(f"Reassigning `{key}` to `{value}`")
-
-            if isinstance(properties[key], Path):
-                properties[key] = Path(value)
-            else:
-                properties[key] = value
-        else:
-            logger.error(f"Unable to find property: {key}")
-
-    logger.debug("Saving updated config defaults to path: ./config.defaults")
-    with open("./config.defaults", "wb") as fileout:
-        pickle.dump(properties, fileout)
+    properties = list_defaults()
+    if key in properties:
+        logger.info(f"Reassigning `{key}` to `{value}`")
+        set_default_property(key, value, logger)
+    else:
+        logger.error(f"Unable to find property: {key}")
 
 def hash_impl(args):
-    """Given a string return it's hash"""
+    """Given a string return its hash."""
     logger = init_log(args)
     logger.debug(f"SRRConv {__version__} - {__name__}.hash_impl")
     logger.debug(f"{args}")
     logger.info(f"{hex(hash_str(args.string))}\t{args.string}")
 
-
-def _get_bigfile_data(big_path: str | Path, index_type: str, input: str, logger: logging.Logger) -> None | bytearray:
+def _get_bigfile_data(big_path: str | Path, index_type: str, input: str, logger: logging.Logger) -> bytes | None:
     """Retrieve data from a big file by hash or filename"""
     logger.info(f"Loading BigFile: {big_path}")
     bigfile = BigFile.from_file(big_path)
@@ -101,9 +73,9 @@ def _get_bigfile_data(big_path: str | Path, index_type: str, input: str, logger:
         logger.info(f"Attempting to get the data for entry with name: {input}...")
         return bigfile.get_data_from_string(input)
 
-def _prep_output_directory(input: str, outpath: Path, no_paths: bool, logger: logging.Logger):
-    """Create the final file path and ensure it's parent directories exist"""
-    final_path = ""
+def _prep_output_directory(input: str, outpath: str | Path, no_paths: bool, logger: logging.Logger) -> Path:
+    """Create the final file path and ensure its parent directories exist."""
+    outpath = Path(outpath)
 
     if no_paths:
         logger.debug("No path flag is set")
@@ -129,16 +101,16 @@ def extract_file_impl(args):
     input    = args.input
     allow_overwrite = args.allow_overwrite
     bigfile  = args.bigfile if args.bigfile else get_default_property("def_directory", logger) / "bigfilehd.dat"
-    outpath  = Path(args.outpath) if args.outpath else Path(get_default_property("out_path", logger))
+    outpath  = args.outpath if args.outpath else get_default_property("out_path", logger)
     no_paths = args.no_paths
-    type = args.type
+    index_type = args.type
 
     final_path = _prep_output_directory(input, outpath, no_paths, logger)
     if final_path.exists() and not allow_overwrite:
         logger.warning(f"Cannot extract file: {final_path} - File exists and overwriting is disabled.")
         return
 
-    data = _get_bigfile_data(bigfile, type, input, logger)
+    data = _get_bigfile_data(bigfile, index_type, input, logger)
     if data == None:
         logger.error("Failed to load data from big file! Aborting...")
         return
@@ -150,15 +122,21 @@ def extract_file_impl(args):
 
     logger.info(f"Success!")
 
-def _get_manifest_filenames(input: str, logger: logging.Logger):
-    """Load the list of file name from the manifest file"""
+def _get_manifest_filenames(input: str, logger: logging.Logger) -> dict[int, str]:
+    """Load the precalculated hashes and filenames from the manifest file."""
     logger.info(f"Loading filenames from the manifest file: {input}")
-    hash_map = {}
+    hash_map: dict[int, str] = {}
 
-    manifest_lines = open(input, "r").readlines()
-    for line in manifest_lines:
-        name = line.replace('\n', '').replace('\r', '')
-        hash_map[hash_str(name)] = name
+    with open(input) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("\t", 1)
+            if len(parts) != 2:
+                continue
+            file_hash = int(parts[0], 0)
+            hash_map[file_hash] = parts[1]
 
     logger.debug(f"Loaded: {len(hash_map)} filenames")
     return hash_map
@@ -180,7 +158,7 @@ def extract_all_w_manifest_cross_ref(args):
 
     input    = args.input if args.input else get_default_property("hash_manifest", logger)
     bigfile  = args.bigfile if args.bigfile else get_default_property("def_directory", logger) / "bigfilehd.dat"
-    outpath  = Path(args.outpath) if args.outpath else Path(get_default_property("out_path", logger))
+    outpath  = args.outpath if args.outpath else get_default_property("out_path", logger)
     no_paths = args.no_paths
     allow_overwrite = args.allow_overwrite
 
@@ -213,7 +191,6 @@ def extract_all_w_manifest_cross_ref(args):
         with open(final_path, "wb") as file_out:
             file_out.write(data)
 
-# TODO: Update
 def extract_w_manifest_cross_ref(args):
     """
         If requested to only extract known files, (If --known flag set) 
@@ -227,33 +204,40 @@ def extract_w_manifest_cross_ref(args):
     input    = args.input if args.input else get_default_property("hash_manifest", logger)
     allow_overwrite = args.allow_overwrite
     bigfile  = args.bigfile if args.bigfile else get_default_property("def_directory", logger) / "bigfilehd.dat"
-    outpath  = Path(args.outpath) if args.outpath else get_default_property("out_path", logger)
+    outpath  = args.outpath if args.outpath else get_default_property("out_path", logger)
     no_paths = args.no_paths
 
     logger.info(f"Loading BigFile: {bigfile}")
     bigfile  = BigFile.from_file(bigfile)
-    
-    manifest_lines = open(input, "r").readlines()
-    for line in manifest_lines:
-        name = line.replace('\n', '').replace('\r', '')
 
-        data = bigfile.get_data_from_string(name)
-        if data is None:
-            continue
+    with open(input) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("\t", 1)
+            if len(parts) != 2:
+                continue
+            file_hash = int(parts[0], 0)
+            name = parts[1]
 
-        if no_paths:
-            final_path = outpath / Path(name).name
-            outpath.mkdir(parents=True, exist_ok=True)
-        else:
-            final_path = outpath / name
-            final_path.parent.mkdir(parents=True, exist_ok=True)
+            data = bigfile.get_data_from_hash(file_hash)
+            if data is None:
+                continue
 
-        if final_path.exists() and not allow_overwrite:
-            logger.warning(f"Cannot extract file: {final_path} - File exists and overwriting is disabled.")
-            continue
+            if no_paths:
+                final_path = outpath / Path(name).name
+                outpath.mkdir(parents=True, exist_ok=True)
+            else:
+                final_path = outpath / name
+                final_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(final_path, "wb") as file_out:
-            file_out.write(data)
+            if final_path.exists() and not allow_overwrite:
+                logger.warning(f"Cannot extract file: {final_path} - File exists and overwriting is disabled.")
+                continue
+
+            with open(final_path, "wb") as file_out:
+                file_out.write(data)
 
 def extract_manifest_impl(args):
     """
@@ -274,8 +258,8 @@ def _get_texture_dir(args, logger: logging.Logger):
         if args.texture_dir:
             logger.warning("Attempted to pass a relative and absolute path at the same time. Using absolute")
         match args.game_dir.lower():
-            case "sr1": texture_dir = Path(get_default_property("sr_directory", logger)) / "1/TEX"
-            case "sr2": texture_dir = Path(get_default_property("sr_directory", logger)) / "2/TEX"
+            case "sr1": texture_dir = get_default_property("sr_directory", logger) / "1/TEX"
+            case "sr2": texture_dir = get_default_property("sr_directory", logger) / "2/TEX"
     return texture_dir
 
 def _get_input_dir(args, logger: logging.Logger):
@@ -287,12 +271,12 @@ def _get_input_dir(args, logger: logging.Logger):
     logger.debug("Path doesn't exist... Checking if game relative flag was set")
     if args.game_dir:
         match args.game_dir.lower():
-            case "sr1": 
+            case "sr1":
                 logger.debug("Game relative flag SR1 set")
-                root = Path(get_default_property("sr_directory", logger)) / "1/OBJECT"
-            case "sr2": 
+                root = get_default_property("sr_directory", logger) / "1/OBJECT"
+            case "sr2":
                 logger.debug("Game relative flag SR2 set")
-                root = Path(get_default_property("sr_directory", logger)) / "2/OBJECT"
+                root = get_default_property("sr_directory", logger) / "2/OBJECT"
             case _: return None
 
         game_relative_path = root / input
@@ -307,16 +291,17 @@ def _get_input_dir(args, logger: logging.Logger):
         logger.error(f"Unable to resolve path: {input}")
         return None
 
-def _determine_srm_version(srm_path: Path):
-    data = open(srm_path, "rb").read(4)
+def _determine_srm_version(srm_path: Path) -> int | None:
+    with open(srm_path, "rb") as f:
+        data = f.read(4)
     if data[-1] == 1:
         return 1
     if data[-1] == 8:
         return 2
-    else:
-        return None
+    return None
     
 def _convert_file_gen1(args, logger):
+    from SrrConv.FBX.srm_to_fbx import srm_to_fbx_gen1
     input           = args.input
     allow_overwrite = args.allow_overwrite
     outpath         = args.outpath if args.outpath else (get_default_property("out_path", logger) / Path(input).stem).with_suffix(".fbx")
@@ -328,9 +313,10 @@ def _convert_file_gen1(args, logger):
     srm_to_fbx_gen1(resolved_input, outpath, image_format, texture_dir, allow_overwrite, logger) # type: ignore
     
 def _convert_file_gen2(args, logger):
-    texture_path = Path(args.texture_dir) if args.texture_dir else Path(get_default_property("def_directory", logger)) / "bigfilehd.dat"
+    from SrrConv.FBX.srm_to_fbx import srm_to_fbx_gen2
+    texture_path = Path(args.texture_dir) if args.texture_dir else get_default_property("def_directory", logger) / "bigfilehd.dat"
     input = Path(args.input)
-    outpath = Path(args.outpath) if args.outpath else (get_default_property("out_path", logger) / Path(input).stem / Path(input).stem).with_suffix(".fbx")
+    outpath = args.outpath if args.outpath else (get_default_property("out_path", logger) / Path(input).stem / Path(input).stem).with_suffix(".fbx")
     image_format    = args.image_format if args.image_format else get_default_property("image_format", logger)
     allow_overwrite = args.allow_overwrite
     prevent_cleanup = args.prevent_cleanup
@@ -338,7 +324,7 @@ def _convert_file_gen2(args, logger):
     if input.suffix.lower() != ".srm":
         return # TODO: Error fucker
     else:
-        srm_to_fbx_gen2(input, texture_path, outpath, image_format, allow_overwrite, prevent_cleanup, logger)
+        srm_to_fbx_gen2(input, outpath, image_format, texture_path, allow_overwrite, prevent_cleanup, logger)
         return
 
     # data = _get_bigfile_data(texture_path, "string", args.input, logger)
